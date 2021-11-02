@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sd2e-dev
+  labels:
+    app: sd2e-dev
+spec:
+  selector:
+    matchLabels:
+      app: sd2e-dev
+  template:
+    metadata:
+      labels:
+        app: sd2e-dev
+        tenant: sd2e
+        instance: dev
+    spec:
+      containers:
+      - name: sd2e-dev
+        image: taccsciapps/jupyterhub:staging
+        imagePullPolicy: Always
+        ports:
+        - name: sd2e-http
+          containerPort: 8000
+        - name: sd2e-notebook
+          containerPort: 8081
+        env:
+        - name: PYTHONUNBUFFERED
+          value: "0"
+        - name: HUB_CONNECT_IP
+          value: sd2e-dev
+        - name: AGAVE_SERVICE_TOKEN
+          value:
+        - name: AGAVE_BASE_URL
+          value: https://api.tacc.utexas.edu
+        - name: TENANT
+          value: sd2e
+        - name: INSTANCE
+          value: dev
+        - name: TAS_URL_BASE
+          value: https://tas.tacc.utexas.edu/api/v1
+        - name: TAS_ROLE_ACCT
+          value: tas-jetstream
+        - name: TAS_ROLE_PASS
+          value:

@@ -1,0 +1,17 @@
+version: "2"
+
+services:
+
+  nginx:
+    image: nginx
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl/cert.cer:/etc/ssl/jupyterhub/jupyterhub_staging_bundle.cer
+      - ./nginx/ssl/key.pem:/etc/ssl/jupyterhub/jupyterhub_staging_bundle.pem
+      - ./nginx/ssl/designsafe.cer:/etc/ssl/jupyterhub/designsafe.jupyterhub.staging.tacc.cloud.cer
+      - ./nginx/ssl/designsafe.key:/etc/ssl/jupyterhub/designsafe.jupyterhub.staging.tacc.cloud.key
+      - ./nginx/ssl/sd2e.cer:/etc/ssl/jupyterhub/sd2e.jupyterhub.staging.tacc.cloud.cer
+      - ./nginx/ssl/sd2e.key:/etc/ssl/jupyterhub/sd2e.jupyterhub.staging.tacc.cloud.key
+    ports:
+      - "80:80"
+      - "443:443"

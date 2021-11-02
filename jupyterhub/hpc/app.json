@@ -1,0 +1,189 @@
+{
+    "available": true,
+    "checkpointable": false,
+    "defaultMemoryPerNode": 1,
+    "defaultProcessorsPerNode": 1,
+    "defaultNodeCount": 1,
+    "defaultQueue": "skx-normal",
+    "deploymentPath": "/apps/jupyter-singularity-maverick-user",
+    "deploymentSystem": "data-jupyter-app-assets",
+    "executionSystem": "hpc-jupyter-tacc-stampede-${TACCUSERNAME}",
+    "executionType": "HPC",
+    "helpURI": "http://jupyter.org/",
+    "label": "HPC Jupyter Notebook - Stampede2",
+    "shortDescription": "Creates an interactive jupyter notebook on the Stampede2 HPC system  and emails connection details.",
+    "longDescription": "",
+    "modules": ["load tacc-singularity", "load python3", "tacc"],
+    "name": "jupyter-tacc-stampede-${TACCUSERNAME}",
+    "ontology": [
+        "http://sswapmeet.sswap.info/agave/apps/Application"
+    ],
+    "parallelism": "SERIAL",
+    "tags": [
+        "python",
+        "jupyter",
+        "singularity",
+        "interactive",
+        "stampede2"
+    ],
+    "templatePath": "wrapper.sh",
+    "testPath": "test/test.sh",
+    "version": "0.1.0",
+    "inputs": [
+        {
+            "id": "inputFiles",
+            "value": {
+                "default": "",
+                "order": 0,
+                "required": false,
+                "validator": "",
+                "visible": true
+            },
+            "semantics": {
+                "ontology": [
+                    ""
+                ],
+                "minCardinality": 1,
+                "maxCardinality": -1,
+                "fileTypes": [
+                    "raw-0"
+                ]
+            },
+            "details": {
+                "description": "",
+                "label": "All files listed will be copied to the notebook's home directory",
+                "argument": null,
+                "showArgument": false
+            }
+        }
+    ],
+    "parameters": [
+        {
+            "id": "nonce_url",
+            "value": {
+                "default": "",
+                "required": true,
+                "type": "string",
+                "validator": "",
+                "visible": true
+            },
+            "semantics": {
+                "ontology": [
+                    "xs:string"
+                ]
+            },
+            "details": {
+                "description": null,
+                "label": "A full URL to a nonce to use to callback to the actor.",
+                "argument": null,
+                "showArgument": false
+            }
+        },
+        {
+            "id": "tenant",
+            "value": {
+                "default": "",
+                "required": true,
+                "type": "string",
+                "validator": "",
+                "visible": true
+            },
+            "semantics": {
+                "ontology": [
+                    "xs:string"
+                ]
+            },
+            "details": {
+                "description": null,
+                "label": "The tenant id associated with this notebook.",
+                "argument": null,
+                "showArgument": false
+            }
+        },
+        {
+            "id": "instance",
+            "value": {
+                "default": "",
+                "required": true,
+                "type": "string",
+                "validator": "",
+                "visible": true
+            },
+            "semantics": {
+                "ontology": [
+                    "xs:string"
+                ]
+            },
+            "details": {
+                "description": null,
+                "label": "The instance associated with this notebook.",
+                "argument": null,
+                "showArgument": false
+            }
+        },
+        {
+            "id": "username",
+            "value": {
+                "default": "",
+                "required": true,
+                "type": "string",
+                "validator": "",
+                "visible": true
+            },
+            "semantics": {
+                "ontology": [
+                    "xs:string"
+                ]
+            },
+            "details": {
+                "description": null,
+                "label": "The username associated with this notebook.",
+                "argument": null,
+                "showArgument": false
+            }
+        },
+        {
+            "id": "environment",
+            "value": {
+                "default": "",
+                "required": true,
+                "type": "string",
+                "validator": "",
+                "visible": true
+            },
+            "semantics": {
+                "ontology": [
+                    "xs:string"
+                ]
+            },
+            "details": {
+                "description": null,
+                "label": "A JSON string containing the environment variables and values to export before launching this notebook.",
+                "argument": null,
+                "showArgument": false
+            }
+        },
+        {
+            "id": "containerImage",
+            "value": {
+                "default": "/work/03076/gzynda/public/apps/singularity-sd2e/sd2e_jupyteruser-sd2e_devel.img",
+                "required": true,
+                "type": "string",
+                "validator": "",
+                "visible": false
+            },
+            "semantics": {
+                "ontology": [
+                    "xs:string"
+                ]
+            },
+            "details": {
+                "description": null,
+                "label": "Optional. Specifying a container image here will override the default Jupyter image.",
+                "argument": null,
+                "showArgument": false
+            }
+        }
+    ],
+    "outputs": []
+}

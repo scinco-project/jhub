@@ -1,0 +1,126 @@
+# Notes
+# available settings for user/group configs
+#    mem_limit
+#    cpu_limit
+#    images
+#    volume_mounts
+# available image options (*required)
+#    * name (dockerrepo/imagename:tag)
+#    display_name
+#    extra_pod_config (various nodeSelectors)
+#    notebook_dir (what dir the notebook starts in)
+#    hpc_available
+#    extra_container_config
+# available template vars for volume mounts
+#    tenant_id
+#    username
+#    tas_homedir
+# availabe tenant config (*required)
+#    * tenant                    * agave_tenant_id
+#    * instance                  * agave_login_button_text
+#    * oauth_callback_url        * mem_limit
+#    * agave_client_id           * cpu_limit
+#    * agave_client_secret       * images
+#    * agave_base_url            * volume_mounts
+#    uid                          oauth_validate_cert
+#    gid                          extra_pod_config
+#    required for projects
+#       container_projects_root_dir
+#       host_projects_root_dir
+#       network_storage
+
+
+
+host_projects_root_dir and container_projects_root_dir only needed when calling the projects API,
+
+<username>.user.config.<tenant>.<instance>.jhub
+{"name": "<username>.user.config.<tenant>.<instance>.jhub",
+ "value": {
+    "tenant": <tenant>,
+    "instance": <instance>,
+    "config_type": "user",
+    "user": "<username>",
+    "images": [
+     {'name':"foo/bar:1.0",},
+     {'name':"foo/bar:1.2",
+      "extra_pod_config": {"nodeSelector": {"selector":"true"}},
+      "notebook_dir": "/start/notebook/here"}],
+    "mem_limit": "5G",
+    "cpu_limit": "5",
+    "volume_mounts": [
+       {'type': 'nfs',
+       'server': 'nfs.server.tacc.utexas.edu',
+       'path': '/gpfs/example/path/{username}/special_folder',
+       'mountPath': '/home/jupyter/user_folder',
+       'readOnly': "True"},
+    ]
+ }
+}
+
+<groupname>.group.config.<tenant>.<instance>.jhub
+{"name": "<groupname>.group.config.<tenant>.<instance>.jhub",
+ "value": {
+    "tenant": <tenant>,
+    "instance": <instance>,
+    "config_type": "group",
+    "group_name": "myspecialgroup",
+    "user": ["user1","testuser"],
+    "images": [
+    {'name':"foo/bar:1.2.5"},
+    ],
+    "mem_limit": "4G",
+    "cpu_limit": "4",
+    "volume_mounts": [
+       {'type': 'nfs',
+       'server': 'nfs.server.tacc.utexas.edu',
+       'path': '/gpfs/example/path/special_group_folder',
+       'mountPath': '/home/jupyter/group_folder',
+       'readOnly': "True"},
+    ]
+ }
+}
+
+config.<tenant>.<instance>.jhub
+{"name": "config.<tenant>.<instance>.jhub",
+ "value": {
+   "tenant": <tenant>,
+   "instance": <instance>,
+   "config_type": "tenant",
+   "volume_mounts": [{'type': 'hostPath',
+                      'path': '/work/{tas_homedir}',
+                      'mountPath': '/home/jupyter/work',
+                      'readOnly': "False"},
+                     {'type': 'nfs',
+                       'server': 'nfs.server.tacc.utexas.edu',
+                       'path': '/gpfs/example/path/{username}',
+                       'mountPath': '/home/jupyter/example',
+                       'readOnly': "True"},
+                    ],
+  "images": [
+    {"name":"foo/bar:2.0",
+     "extra_pod_config": {"nodeSelector": {"selector2":"true"}},
+     "hpc_available": "True",
+     "notebook_dir": "/start/notebook/here"}
+    },
+    {"name":"another/image:1.5",
+     "extra_pod_config": {"nodeSelector": {"selector1":"true"}},
+     "description": "This version 1.5 of another/image",
+     "display_name": "Default Settings"
+    }
+  ],
+  "oauth_callback_url": "https://exampleurl.tacc.cloud/hub/oauth_callback",
+  "oauth_validate_cert": "True",
+  "agave_client_id": "client_id",
+  "agave_client_secret": "client_secret",
+  "agave_base_url": "https://portals-api.tacc.utexas.edu",
+  "agave_tenant_id": "portals",
+  "host_projects_root_dir": "/gpfs/corral/here/are/my/projects",
+  "container_projects_root_dir": "/home/jupyter/projects",
+  "agave_login_button_text": "Jupyterhub",
+  "mem_limit": "3G",
+  "cpu_limit": "1",
+  "extra_pod_config": {"nodeSelector": {"selector":"true"}},
+  "uid": "458981",
+  "gid": "816877"
+}
+}
