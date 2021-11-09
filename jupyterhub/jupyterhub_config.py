@@ -84,13 +84,13 @@ c.JupyterHub.admin_access = True
 #    where `handler` is the calling web.RequestHandler,
 #    and `data` is the POST form data from the login page.
 #c.JupyterHub.authenticator_class = 'jupyterhub.auth.PAMAuthenticator'
-c.JupyterHub.authenticator_class = 'oauthenticator.agave.AgaveOAuthenticator'
+c.JupyterHub.authenticator_class = 'oauthenticator.agave.TapisOAuthenticator'
 # c.JupyterHub.authenticator_class = 'jupyterhub.auth.DummyAuthenticator' #for testing
 
-c.AgaveOAuthenticator.oauth_callback_url = CONFIGS['oauth_callback_url']
-c.AgaveOAuthenticator.client_id = CONFIGS['agave_client_id']
-c.AgaveOAuthenticator.client_secret = CONFIGS['agave_client_secret']
-c.AgaveOAuthenticator.authorize_url = "{}/oauth2/authorize".format(CONFIGS.get('agave_base_url').rstrip('/'))
+c.TapisOAuthenticator.oauth_callback_url = CONFIGS['oauth_callback_url']
+c.TapisOAuthenticator.client_id = CONFIGS['tapis_client_id']
+c.TapisOAuthenticator.client_secret = CONFIGS['tapis_client_key']
+c.TapisOAuthenticator.authorize_url = "{}/oauth2/authorize".format(CONFIGS.get('tapis_base_url').rstrip('/'))
 c.Authenticator.admin_users = CONFIGS.get('admin_users', [])
 
 
