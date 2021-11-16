@@ -8,15 +8,14 @@ from tapipy.tapis import Tapis
 
 INSTANCE = os.environ.get("INSTANCE")
 TENANT = os.environ.get("TENANT")
-service_token = os.environ.get("AGAVE_SERVICE_TOKEN")
 tapis_service_token = os.environ.get("TAPIS_SERVICE_TOKEN")
 base_url = os.environ.get("AGAVE_BASE_URL", "https://api.tacc.utexas.edu")
-tapis_base_url = os.environ.get("TAPIS_BASE_URL", "https://dev.tapis.io")
+tapis_base_url = os.environ.get("TAPIS_BASE_URL", "https://tacc.tapis.io")
 database = os.environ.get("TAPIS_DATABASE")
 collection = os.environ.get("TAPIS_COLLECTION")
 
-if not service_token:
-    raise Exception("Missing SERVICE_TOKEN configuration.")
+if not tapis_service_token:
+    raise Exception("Missing TAPIS_SERVICE_TOKEN configuration.")
 
 
 def get_config_metadata_name():
