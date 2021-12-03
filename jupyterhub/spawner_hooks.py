@@ -446,6 +446,8 @@ def get_mounts(spawner):
             # volume names must consist of lower case alphanumeric characters or '-',
             # and must start and end with an alphanumeric character (e.g. 'my-name',  or '123-abc',
             # regex used for validation is '[a-z0-9]([-a-z0-9]*[a-z0-9])?')
+            if item["mountPath"][-1] == '/':
+                item["mountPath"] = item["mountPath"][:-1]
             vol_name = re.sub(
                 r"([^a-z0-9-\s]+?)", "", item["mountPath"].split("/")[-1].lower()
             )
