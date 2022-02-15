@@ -7,6 +7,7 @@ RUN pip install oauthenticator agavepy jupyterhub-kubespawner==0.11.1 notebook i
 RUN pip install pyjwt[crypto]==1.7.1
 RUN pip install --upgrade pip
 RUN pip install tapipy --ignore-installed certifi 
+RUN pip install ldap3
 
 ADD agave.py /opt/conda/lib/python3.6/site-packages/oauthenticator/agave.py
 ADD common.py /opt/conda/lib/python3.6/site-packages/jupyterhub/common.py

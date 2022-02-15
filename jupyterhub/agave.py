@@ -95,7 +95,7 @@ class TapisOAuthenticator(OAuthenticator):
         expires_in = resp_json["result"]["access_token"]["expires_in"]
         expires_at = resp_json["result"]["access_token"]["expires_at"]
         data = jwt.decode(access_token, verify=False)
-        username = data["tapis/username"]
+        username = data["tapis/username"].lower()
         created_at = time.time()
 
         self.ensure_token_dir(username)

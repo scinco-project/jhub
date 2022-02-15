@@ -15,12 +15,14 @@ from jupyterhub.common import (
     get_user_configs,
 )
 from tornado import web
+from ldap3 import Server, Connection, SAFE_SYNC
 
 # TAS configuration:
 # base URL for TAS API.
 TAS_URL_BASE = os.environ.get("TAS_URL_BASE", "https://tas.tacc.utexas.edu/api/v1")
 TAS_ROLE_ACCT = os.environ.get("TAS_ROLE_ACCT", "tas-jetstream")
 TAS_ROLE_PASS = os.environ.get("TAS_ROLE_PASS")
+LDAP_PASS = os.environ.get("LDAP_PASS")
 
 
 def hook(spawner):
@@ -62,7 +64,7 @@ def hook(spawner):
                 )
             )
             allowed_options = next(
-                option for option in image_options if option["name"] == image["name"]
+                option for option in image_options if option["name"] == image["name"] and option["display_name"] == image["display_name"]
             )
             if spawner.user_options.get("hpc"):
                 if not eval(allowed_options.get("hpc_available", "False")):
@@ -298,41 +300,32 @@ def get_tas_data(spawner):
             )
         )
         return
+    
+    gids = []
 
-    # first look for an "extended profile" record in agave metadata. such a record might have the
-    # gid to use for this user.
-    if (
-        spawner.access_token
-        and spawner.refresh_token
-        and spawner.url
-        and not spawner.tas_gid
-    ):
-        t = get_tapis_oauth_client(
-            spawner.url, spawner.access_token, spawner.refresh_token
+    try:
+        server = Server('ldaps://ldap.tacc.utexas.edu:636')
+        conn = Connection(server, 'uid=ldapbind,ou=People,dc=tacc,dc=utexas,dc=edu', LDAP_PASS, client_strategy=SAFE_SYNC, auto_bind=True)
+        status, result, response, _ = conn.search('ou=Groups,dc=tacc,dc=utexas,dc=edu', f'(uniqueMember=uid={spawner.user.name},ou=People,dc=tacc,dc=utexas,dc=edu)')
+        for entry in response:
+            data = entry['dn'].split(',')
+            cn = data[0].split('=')
+            group = cn[1]
+            temp_gid = group.split('-')[1]
+            try:
+                gid = int(temp_gid)
+                gids.append(gid)
+            except Exception as e:
+                continue
+    except Exception as e:
+        spawner.log.error(
+            "Did not get gid's from ldap. rsp: {}"
+            .format(e)
         )
-        meta_name = "profile.{}.{}".format(TENANT, spawner.user.name)
-        q = "{'name': '" + meta_name + "'}"
-        spawner.log.info("using query: {}".format(q))
-        try:
-            rsp = json.loads(
-                t.meta.listMetadata(db=database, collection=collection, filter=q)
-            )
-        except Exception as e:
-            spawner.log.error(
-                "Got an exception trying to retrieve the extended profile. Exception: {}".format(
-                    e
-                )
-            )
-        try:
-            spawner.tas_gid = rsp[0].value["posix_gid"]
-        except IndexError:
-            spawner.tas_gid = None
-        except Exception as e:
-            spawner.log.error(
-                "Got an exception trying to retrieve the gid from the extended profile. Exception: {}".format(
-                    e
-                )
-            )
+    
+    if gids:
+        spawner.supplemental_gids = gids
+
     # if the instance has a configured TAS_GID to use we will use that; otherwise,
     # we fall back on using the user's uid as the gid, which is (almost) always safe)
     if not spawner.tas_gid:
