@@ -114,7 +114,7 @@ def hook(spawner):
             "NUMEXPR_NUM_THREADS": max(cpu_limits),
             "OMP_NUM_THREADS": max(cpu_limits),
             "OPENBLAS_NUM_THREADS": max(cpu_limits),
-            "SCINCO-JUPYTERHUB-IMAGE": spawner.image,
+            "SCINCO_JUPYTERHUB_IMAGE": spawner.image,
         }
     get_mounts(spawner)
     get_projects(spawner)
@@ -459,71 +459,72 @@ def get_mounts(spawner):
 
 
 def get_projects(spawner):
-    spawner.host_projects_root_dir = spawner.configs.get("host_projects_root_dir")
-    spawner.container_projects_root_dir = spawner.configs.get(
-        "container_projects_root_dir"
-    )
-    spawner.network_storage = spawner.configs.get("network_storage")
-    if not spawner.host_projects_root_dir or not spawner.container_projects_root_dir:
-        spawner.log.info(
-            "No host_projects_root_dir or container_projects_root_dir. configs:{}".format(
-                spawner.configs
-            )
-        )
+    if not spawner.access_token:
+        spawner.log.info("no access_token")
         return None
-    if not spawner.access_token or not spawner.url:
-        spawner.log.info("no access_token or url")
-        return None
-    url = "{}/projects/v2/".format(spawner.url)
-
+    #url = "{}/projects/v2/".format(spawner.url)
+    projects_url = "https://api.tacc.utexas.edu/projects/v2"
+    base_url = "https://api.tacc.utexas.edu"
+    
+    # use spawner.access_token to generate v2 token
+    # call v3 to v2 token endpoint
+    # tacc.develop.tapis.io/v3/oauth2/v2/token
     try:
-        ag = get_oauth_client(spawner.url, spawner.access_token, spawner.refresh_token)
-        rsp = ag.geturl(url)
+        token_url = "https://tacc.develop.tapis.io/v3/oauth2/v2/token"
+        headers = {
+            'x-tapis-token': spawner.access_token
+        }
+        spawner.log.info(spawner.access_token)
+        rsp = requests.post(token_url, headers=headers)
+        spawner.log.info(rsp.json())
+        access_token = rsp.json()['access_token']
     except Exception as e:
-        spawner.log.warn("Got exception calling /projects: {}".format(e))
+        spawner.log.error(f"Unable to generate v2 token; error: {e}; response: {rsp}")
         return None
+
+    # with v2 token, send request to projects url
     try:
+        ag = Agave(api_server=base_url, token=access_token)
+        rsp = ag.geturl(projects_url)
+        rsp.raise_for_status()
         data = rsp.json()
-    except ValueError as e:
-        spawner.log.warn("Did not get JSON from /projects. Exception: {}".format(e))
-        spawner.log.warn("Full response from service: {}".format(rsp))
-        spawner.log.warn("url used: {}".format(url))
+    except Exception as e:
+        spawner.log.warn(f"Did not get data from /projects. Exception: {e}")
+        spawner.log.warn(f"Full response from service: {rsp}")
+        spawner.log.warn(f"url used: {projects_url}")
         return None
-    projects = data.get("projects")
+
+    projects = data.get("mounts")
     spawner.log.info("service returned projects: {}".format(projects))
+
     try:
         spawner.log.info("Found {} projects".format(len(projects)))
     except TypeError:
         spawner.log.error("Projects data has no length.")
-        spawner.log.info("response: {}, data: {}".format(rsp, data))
+        spawner.log.info(f"response: {rsp}, data: {data}")
         return None
-    for p in projects:
-        uuid = p.get("uuid")
-        if not uuid:
-            spawner.log.warn("Did not get a uuid for a project: {}".format(p))
-            continue
-        project_id = p.get("value").get("projectId")
-        if not project_id:
-            spawner.log.warn("Did not get a projectId for a project: {}".format(p))
-            continue
 
+    for p in projects:
+        mountPath = p.get('mountPath')
+        path = p.get('path')
+        pems = p.get('pems')
+        readOnly = False if pems == 'rw' else True
+        if path.split('/')[1] == 'work':
+            continue
+        # check if corral -- then use nfs, else, use hostPath
         spawner.volumes.append(
             {
-                "name": "project-{}".format(safe_string(uuid).lower()),
                 "nfs": {
-                    "server": spawner.network_storage,
-                    "path": "{}/{}".format(spawner.host_projects_root_dir, uuid),
-                    "readOnly": False,
+                    "server": "129.114.52.151",
+                    "path": path,
+                    "readOnly": readOnly,
                 },
             }
         )
 
         spawner.volume_mounts.append(
             {
-                "mountPath": "{}/{}".format(
-                    spawner.container_projects_root_dir, project_id
-                ),
-                "name": "project-{}".format(safe_string(uuid).lower()),
+                "mountPath": f"/home/jupyter/projects/{mountPath}"
             }
         )
     spawner.log.info(spawner.volumes)
