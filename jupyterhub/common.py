@@ -11,6 +11,7 @@ TENANT = os.environ.get("TENANT")
 tapis_service_token = os.environ.get("TAPIS_SERVICE_TOKEN")
 base_url = os.environ.get("AGAVE_BASE_URL", "https://api.tacc.utexas.edu")
 tapis_base_url = os.environ.get("TAPIS_BASE_URL", "https://tacc.tapis.io")
+v2_token_url = os.environ.get("V2_TOKEN_URL", "https://tacc.develop.tapis.io/v3/oauth2/v2/token")
 database = os.environ.get("TAPIS_DATABASE")
 collection = os.environ.get("TAPIS_COLLECTION")
 

@@ -10,6 +10,8 @@ from tapipy.tapis import Tapis
 from jupyterhub.common import (
     TENANT,
     INSTANCE,
+    base_url,
+    v2_token_url,
     get_tenant_configs,
     safe_string,
     get_user_configs,
@@ -37,6 +39,8 @@ def hook(spawner):
             spawner.access_token, spawner.refresh_token, spawner.url
         )
     )
+    # check if access token is valid
+    
     get_tas_data(spawner)
 
     spawner.uid = int(spawner.configs.get("uid", spawner.tas_uid))
@@ -44,7 +48,7 @@ def hook(spawner):
 
     spawner.extra_pod_config = spawner.configs.get("extra_pod_config", {})
     spawner.extra_container_config = spawner.configs.get("extra_container_config", {})
-
+    
     if (
         len(spawner.configs.get("images")) == 1 and not spawner.hpc_available
     ):  # only 1 image option, so we skipped the form
@@ -52,11 +56,18 @@ def hook(spawner):
     else:
         # verify form data
         image_options = spawner.configs.get("images")
+        spawner.log.info(f"Verifiying image: {image_options}")
+        user_configs = spawner.user_configs
+        spawner.log.info(f"User configs: {user_configs}")
         for item in spawner.user_configs:
+            spawner.log.info(f"Item: {item}")
             for image in item["value"]["images"]:
+                spawner.log.info(f"Image: {image}")
                 image_options.append(image)
-
+        user_options = spawner.user_options        
+        spawner.log.info(f"User options: {user_options}")
         image = ast.literal_eval(spawner.user_options["image"][0])
+        spawner.log.info(f"Image: {image}")
         try:
             spawner.log.info(
                 "Checking user options: image-{} hpc-{} against metadata: {}".format(
@@ -139,7 +150,9 @@ def get_tapis_oauth_client(base_url, access_token, refresh_token):
 
 async def get_notebook_options(spawner):
     spawner.configs = get_tenant_configs()
+    spawner.log.info(f"spawner configs: {spawner.configs}")
     spawner.user_configs = get_user_configs(spawner.user.name)
+    spawner.log.info(f"spawner user configs: {spawner.configs}")
 
     image_options = spawner.configs.get("images")
 
@@ -160,7 +173,6 @@ async def get_notebook_options(spawner):
             spawner.hpc_available = False
 
     image_options = sorted(image_options, key=lambda d: d["name"])
-
     if len(image_options) > 1 or spawner.hpc_available:
         options = ""
         for image in image_options:
@@ -209,6 +221,7 @@ async def get_notebook_options(spawner):
         select_images = '<select id="image" name="image" size="10" onchange="{}"> {} </select>'.format(
             js, options
         )
+        spawner.log.info(select_images)
         return "{}{}{}".format(select_images, image_description, hpc)
 
 
@@ -463,20 +476,19 @@ def get_projects(spawner):
         spawner.log.info("no access_token")
         return None
     #url = "{}/projects/v2/".format(spawner.url)
-    projects_url = "https://api.tacc.utexas.edu/projects/v2"
-    base_url = "https://api.tacc.utexas.edu"
+    projects_url = f"{base_url}/projects/v2"
     
     # use spawner.access_token to generate v2 token
     # call v3 to v2 token endpoint
     # tacc.develop.tapis.io/v3/oauth2/v2/token
+    spawner.log.error("getting projects")
     try:
-        token_url = "https://tacc.develop.tapis.io/v3/oauth2/v2/token"
+        token_url = v2_token_url
         headers = {
             'x-tapis-token': spawner.access_token
         }
-        spawner.log.info(spawner.access_token)
         rsp = requests.post(token_url, headers=headers)
-        spawner.log.info(rsp.json())
+        rsp.raise_for_status()
         access_token = rsp.json()['access_token']
     except Exception as e:
         spawner.log.error(f"Unable to generate v2 token; error: {e}; response: {rsp}")
@@ -495,7 +507,6 @@ def get_projects(spawner):
         return None
 
     projects = data.get("mounts")
-    spawner.log.info("service returned projects: {}".format(projects))
 
     try:
         spawner.log.info("Found {} projects".format(len(projects)))
@@ -509,23 +520,54 @@ def get_projects(spawner):
         path = p.get('path')
         pems = p.get('pems')
         readOnly = False if pems == 'rw' else True
+        source = ""
         if path.split('/')[1] == 'work':
-            continue
+            source = "work"
+            path = path.replace('work', 'work2', 1)
+        if path.split('/')[1] == 'corral-repl':
+            source = "corral"
+            path = path.replace('corral-repl', 'corral/main', 1)
         # check if corral -- then use nfs, else, use hostPath
-        spawner.volumes.append(
-            {
-                "nfs": {
-                    "server": "129.114.52.151",
-                    "path": path,
-                    "readOnly": readOnly,
-                },
-            }
-        )
+        if source == "corral":
+            name = 'project-{}'.format(safe_string(mountPath).lower())
+            if len(name) > 63:
+                name = name[:62] + 'e'
+            spawner.volumes.append(
+                {
+                    'name': name,
+                    "nfs": {
+                        "server": "129.114.52.151",
+                        "path": path,
+                        "readOnly": readOnly,
+                    },
+                }
+            )
 
-        spawner.volume_mounts.append(
-            {
-                "mountPath": f"/home/jupyter/projects/{mountPath}"
-            }
-        )
+            spawner.volume_mounts.append(
+                {
+                    "mountPath": f"/home/jovyan/projects{mountPath}",
+                    'name': name,
+                }
+            )
+        if source == "work":
+            name = 'project-{}'.format(safe_string(mountPath).lower())
+            if len(name) > 63:
+                name = name[:62] + 'e'
+            spawner.volumes.append(
+                {
+                    'name': name,
+                    "hostPath": {
+                        "path": path,
+                        "readOnly": readOnly,
+                    },
+                }
+            )
+
+            spawner.volume_mounts.append(
+                {
+                    "mountPath": f"/home/jovyan/projects{mountPath}",
+                    'name': name,
+                }
+            )
     spawner.log.info(spawner.volumes)
     spawner.log.info(spawner.volume_mounts)

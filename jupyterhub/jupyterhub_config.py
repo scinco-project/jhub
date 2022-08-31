@@ -56,7 +56,8 @@ c.JupyterHub.admin_access = True
 # c.JupyterHub.admin_users = set()
 
 # Allow named single-user servers per user
-# c.JupyterHub.allow_named_servers = False
+# c.JupyterHub.allow_named_servers = True
+# c.JupyterHub.named_server_limit_per_user = 3
 
 # Answer yes to any questions (e.g. confirm overwrite)
 # c.JupyterHub.answer_yes = False
@@ -85,6 +86,17 @@ c.JupyterHub.admin_access = True
 #  - takes two arguments: (handler, data),
 #    where `handler` is the calling web.RequestHandler,
 #    and `data` is the POST form data from the login page.
+#c.JupyterHub.tornado_settings = {"cookie_options": {"samesite": "None", "Secure": True}}
+c.JupyterHub.tornado_settings = {
+    'headers': {
+        'Access-Control-Allow-Origin': '*',
+    },
+    'cookie_options': {
+        "Secure": True,
+        "SameSite": "None"
+    }
+}
+
 # c.JupyterHub.authenticator_class = 'jupyterhub.auth.PAMAuthenticator'
 c.JupyterHub.authenticator_class = "oauthenticator.agave.TapisOAuthenticator"
 # c.JupyterHub.authenticator_class = 'jupyterhub.auth.DummyAuthenticator' #for testing
@@ -422,7 +434,7 @@ c.JupyterHub.spawner_class = "kubespawner.KubeSpawner"
 # c.JupyterHub.subdomain_host = ''
 
 # Paths to search for jinja templates, before using the default templates.
-c.JupyterHub.template_paths = ["/opt/conda/share/jupyterhub/templates/custom_templates"]
+c.JupyterHub.template_paths = ["/usr/local/share/jupyterhub/templates/custom_templates"]
 
 # Extra variables to be passed into jinja templates
 # c.JupyterHub.template_vars = {}
@@ -475,7 +487,8 @@ c.JupyterHub.template_paths = ["/opt/conda/share/jupyterhub/templates/custom_tem
 #  Some spawners allow shell-style expansion here, allowing you to use
 #  environment variables here. Most, including the default, do not. Consult the
 #  documentation for your spawner to verify!
-# c.Spawner.args = []
+#c.Spawner.args = [f'--NotebookApp.allow_origin=*']
+c.NotebookApp.allow_origin='*'
 
 # The command used for starting the single-user server.
 #
