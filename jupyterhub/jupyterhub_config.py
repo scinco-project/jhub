@@ -1,5 +1,5 @@
 # Configuration file for jupyterhub.
-from jupyterhub.spawner_hooks import hook, get_notebook_options, parse_form_data, get_spawner_username
+from jupyterhub.spawner_hooks import hook, get_notebook_options, parse_form_data, get_pvc_name
 from oauthenticator.agave import TapisOAuthenticator
 import os
 
@@ -984,8 +984,8 @@ c.KubeSpawner.storage_capacity = "25Gi"
 c.KubeSpawner.delete_pvc = False
 
 # Name of the pvc
-username = get_spawner_username
-c.KubeSpawner.pvc_name_template = f'userdata-{username}'
+# username = get_spawner_username
+c.KubeSpawner.pvc_name_template = get_pvc_name
 
 # This will ensure pvc is created before spawning the pod
 c.KubeSpawner.storage_pvc_ensure = True
