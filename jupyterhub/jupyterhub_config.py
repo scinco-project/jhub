@@ -1,5 +1,6 @@
 # Configuration file for jupyterhub.
-from jupyterhub.spawner_hooks import hook, get_notebook_options
+from jupyterhub.spawner_hooks import hook, get_notebook_options, parse_form_data
+from oauthenticator.agave import TapisOAuthenticator
 import os
 
 from agavepy.agave import Agave
@@ -89,7 +90,8 @@ c.JupyterHub.admin_access = True
 #c.JupyterHub.tornado_settings = {"cookie_options": {"samesite": "None", "Secure": True}}
 c.JupyterHub.tornado_settings = {
     'headers': {
-        'Access-Control-Allow-Origin': '*',
+        'Content-Security-Policy': 'frame-ancestors *',
+        "Access-Control-Allow-Origin": "http://locahost:8080",
     },
     'cookie_options': {
         "Secure": True,
@@ -98,7 +100,7 @@ c.JupyterHub.tornado_settings = {
 }
 
 # c.JupyterHub.authenticator_class = 'jupyterhub.auth.PAMAuthenticator'
-c.JupyterHub.authenticator_class = "oauthenticator.agave.TapisOAuthenticator"
+c.JupyterHub.authenticator_class = TapisOAuthenticator
 # c.JupyterHub.authenticator_class = 'jupyterhub.auth.DummyAuthenticator' #for testing
 
 c.TapisOAuthenticator.oauth_callback_url = CONFIGS["oauth_callback_url"]
@@ -109,7 +111,12 @@ c.TapisOAuthenticator.authorize_url = "{}/oauth2/authorize".format(
 )
 c.Authenticator.admin_users = CONFIGS.get("admin_users", [])
 
-
+c.JupyterHub.load_roles = [
+ {
+   'name': 'server',
+   'scopes': ['inherit']
+ }
+]
 # The base URL of the entire application.
 #
 #  Add this to the beginning of all JupyterHub URLs. Use base_url to run
@@ -487,8 +494,17 @@ c.JupyterHub.template_paths = ["/usr/local/share/jupyterhub/templates/custom_tem
 #  Some spawners allow shell-style expansion here, allowing you to use
 #  environment variables here. Most, including the default, do not. Consult the
 #  documentation for your spawner to verify!
-#c.Spawner.args = [f'--NotebookApp.allow_origin=*']
-c.NotebookApp.allow_origin='*'
+# c.Spawner.args = [f'--NotebookApp.allow_origin=*']
+c.NotebookApp.tornado_settings={
+    'headers': {
+        'Content-Security-Policy': "frame-ancestors self *"
+    },
+    'cookie_options': {
+        'SameSite': 'None',
+        'Secure': True
+    }
+}
+c.NotebookApp.disable_check_xsrf = True
 
 # The command used for starting the single-user server.
 #
@@ -962,3 +978,4 @@ c.KubeSpawner.delete_stopped_pods = False
 # setup
 c.KubeSpawner.pre_spawn_hook = hook
 c.KubeSpawner.options_form = get_notebook_options
+c.KubeSpawner.options_from_form = parse_form_data

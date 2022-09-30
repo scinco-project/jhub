@@ -6,7 +6,7 @@ import re
 import requests
 
 from agavepy.agave import Agave
-from tapipy.tapis import Tapis
+#from tapipy.tapis import Tapis
 from jupyterhub.common import (
     TENANT,
     INSTANCE,
@@ -224,6 +224,10 @@ async def get_notebook_options(spawner):
         spawner.log.info(select_images)
         return "{}{}{}".format(select_images, image_description, hpc)
 
+async def parse_form_data(formdata, spawner):
+    spawner.log.info(f"FORM DATA: {formdata}")
+    return formdata
+
 
 def get_agave_access_data(spawner):
     """
@@ -416,6 +420,10 @@ def get_mounts(spawner):
             "name": current_safe_name,
             "emptyDir": {},
         },
+        {
+            "name": f"userdata-{spawner.user.name}",
+            "persistentVolumeClaim": {"claimName": f"userdata-{spawner.user.name}"}
+        }
     ]
     spawner.volume_mounts = [
         {
@@ -428,6 +436,10 @@ def get_mounts(spawner):
             "name": current_safe_name,
             "subPath": "current",
         },
+        {
+            "mounthPath": "/home/jupyter/userdata",
+            "name": f"userdata-{spawner.user.name}"
+        }
     ]
     volume_mounts = spawner.configs.get("volume_mounts")
 
