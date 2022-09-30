@@ -399,6 +399,10 @@ def get_mounts(spawner):
                     "name": current_safe_name,
                     "subPath": "current",
                 },
+                {
+                    "mountPath": "/home/jupyter/userdata",
+                    "name": f"userdata-{spawner.user.name}"
+                }
             ],
         }
     ]
@@ -437,7 +441,7 @@ def get_mounts(spawner):
             "subPath": "current",
         },
         {
-            "mounthPath": "/home/jupyter/userdata",
+            "mountPath": "/home/jupyter/userdata",
             "name": f"userdata-{spawner.user.name}"
         }
     ]
