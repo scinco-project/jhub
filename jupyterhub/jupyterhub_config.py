@@ -985,7 +985,7 @@ c.KubeSpawner.delete_pvc = False
 
 # Name of the pvc
 # username = get_spawner_username
-c.KubeSpawner.pvc_name_template = get_pvc_name
+c.KubeSpawner.pvc_name_template = 'userdata-{username}'
 
 # This will ensure pvc is created before spawning the pod
 c.KubeSpawner.storage_pvc_ensure = True
