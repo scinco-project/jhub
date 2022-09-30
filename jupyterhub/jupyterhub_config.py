@@ -1,5 +1,5 @@
 # Configuration file for jupyterhub.
-from jupyterhub.spawner_hooks import hook, get_notebook_options, parse_form_data
+from jupyterhub.spawner_hooks import hook, get_notebook_options, parse_form_data, get_spawner_username
 from oauthenticator.agave import TapisOAuthenticator
 import os
 
@@ -969,6 +969,26 @@ c.Spawner.cmd = ["jupyterhub-singleuser"]
 # The number of threads to allocate for encryption
 # c.CryptKeeper.n_threads = 8
 
+
+# ------------------------------------------------------------------------------
+# Adding Persistent Volume Storage for Jupyter Notebook servers
+# ------------------------------------------------------------------------------
+
+# Storage class for PVC -- rbd = remote block device
+c.KubeSpawner.storage_class = "rbd"
+
+# Storage capacity for the PVC
+c.KubeSpawner.storage_capacity = "25Gi"
+
+# Specify this to not delete pvc after pod termination
+c.KubeSpawner.delete_pvc = False
+
+# Name of the pvc
+username = get_spawner_username
+c.KubeSpawner.pvc_name_template = f'userdata-{username}'
+
+# This will ensure pvc is created before spawning the pod
+c.KubeSpawner.storage_pvc_ensure = True
 
 # debugging
 c.KubeSpawner.debug = True
