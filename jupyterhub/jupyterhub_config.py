@@ -88,16 +88,16 @@ c.JupyterHub.admin_access = True
 #    where `handler` is the calling web.RequestHandler,
 #    and `data` is the POST form data from the login page.
 #c.JupyterHub.tornado_settings = {"cookie_options": {"samesite": "None", "Secure": True}}
-c.JupyterHub.tornado_settings = {
-    'headers': {
-        'Content-Security-Policy': 'frame-ancestors *',
-        "Access-Control-Allow-Origin": "http://locahost:8080",
-    },
-    'cookie_options': {
-        "Secure": True,
-        "SameSite": "None"
-    }
-}
+# c.JupyterHub.tornado_settings = {
+#     'headers': {
+#         'Content-Security-Policy': 'frame-ancestors *',
+#         "Access-Control-Allow-Origin": "http://locahost:8080",
+#     },
+#     'cookie_options': {
+#         "Secure": True,
+#         "SameSite": "None"
+#     }
+# }
 
 # c.JupyterHub.authenticator_class = 'jupyterhub.auth.PAMAuthenticator'
 c.JupyterHub.authenticator_class = TapisOAuthenticator
@@ -111,12 +111,12 @@ c.TapisOAuthenticator.authorize_url = "{}/oauth2/authorize".format(
 )
 c.Authenticator.admin_users = CONFIGS.get("admin_users", [])
 
-c.JupyterHub.load_roles = [
- {
-   'name': 'server',
-   'scopes': ['inherit']
- }
-]
+# c.JupyterHub.load_roles = [
+#  {
+#    'name': 'server',
+#    'scopes': ['inherit']
+#  }
+# ]
 # The base URL of the entire application.
 #
 #  Add this to the beginning of all JupyterHub URLs. Use base_url to run

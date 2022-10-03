@@ -35,11 +35,11 @@ FROM taccsciapps/jupyterhub:2.0.2
 # COPY requirements.txt /home/requirements.txt
 # RUN pip install -r /home/requirements.txt
 
-# ADD agave.py /usr/local/lib/python3.9/site-packages/oauthenticator/agave.py
-# ADD common.py /usr/local/lib/python3.9/site-packages/jupyterhub/common.py
-# ADD selenium/ /srv/jupyterhub/selenium
-ADD spawner_hooks.py /usr/local/lib/python3.9/site-packages/jupyterhub/spawner_hooks.py
+ADD agave.py /opt/conda/lib/python3.6/site-packages/oauthenticator/agave.py
+ADD common.py /opt/conda/lib/python3.6/site-packages/jupyterhub/common.py
+ADD selenium/ /srv/jupyterhub/selenium
+ADD spawner_hooks.py /opt/conda/lib/python3.6/site-packages/jupyterhub/spawner_hooks.py
 ADD jupyterhub_config.py /srv/jupyterhub/jupyterhub_config.py
-# ADD custom_templates /usr/local/share/jupyterhub/templates/custom_templates
+ADD custom_templates /usr/local/share/jupyterhub/templates/custom_templates
 
 # CMD ["jupyterhub", "--config", "/srv/jupyterhub/jupyterhub_config.py"]
