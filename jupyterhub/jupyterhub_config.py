@@ -88,16 +88,16 @@ c.JupyterHub.admin_access = True
 #    where `handler` is the calling web.RequestHandler,
 #    and `data` is the POST form data from the login page.
 #c.JupyterHub.tornado_settings = {"cookie_options": {"samesite": "None", "Secure": True}}
-c.JupyterHub.tornado_settings = {
-    'headers': {
-        'Content-Security-Policy': 'frame-ancestors *',
-        "Access-Control-Allow-Origin": "http://locahost:8080",
-    },
-    'cookie_options': {
-        "Secure": True,
-        "SameSite": "None"
-    }
-}
+# c.JupyterHub.tornado_settings = {
+#     'headers': {
+#         'Content-Security-Policy': 'frame-ancestors *',
+#         "Access-Control-Allow-Origin": "http://locahost:8080",
+#     },
+#     'cookie_options': {
+#         "Secure": True,
+#         "SameSite": "None"
+#     }
+# }
 
 # c.JupyterHub.authenticator_class = 'jupyterhub.auth.PAMAuthenticator'
 c.JupyterHub.authenticator_class = TapisOAuthenticator
@@ -495,16 +495,16 @@ c.JupyterHub.template_paths = ["/usr/local/share/jupyterhub/templates/custom_tem
 #  environment variables here. Most, including the default, do not. Consult the
 #  documentation for your spawner to verify!
 # c.Spawner.args = [f'--NotebookApp.allow_origin=*']
-c.NotebookApp.tornado_settings={
-    'headers': {
-        'Content-Security-Policy': "frame-ancestors self *"
-    },
-    'cookie_options': {
-        'SameSite': 'None',
-        'Secure': True
-    }
-}
-c.NotebookApp.disable_check_xsrf = True
+# c.NotebookApp.tornado_settings={
+#     'headers': {
+#         'Content-Security-Policy': "frame-ancestors self *"
+#     },
+#     'cookie_options': {
+#         'SameSite': 'None',
+#         'Secure': True
+#     }
+# }
+# c.NotebookApp.disable_check_xsrf = True
 
 # The command used for starting the single-user server.
 #
@@ -975,20 +975,20 @@ c.Spawner.cmd = ["jupyterhub-singleuser"]
 # ------------------------------------------------------------------------------
 
 # Storage class for PVC -- rbd = remote block device
-c.KubeSpawner.storage_class = "rbd"
+# c.KubeSpawner.storage_class = "rbd"
 
 # Storage capacity for the PVC
-c.KubeSpawner.storage_capacity = "25Gi"
+# c.KubeSpawner.storage_capacity = "25Gi"
 
 # Specify this to not delete pvc after pod termination
-c.KubeSpawner.delete_pvc = False
+# c.KubeSpawner.delete_pvc = False
 
 # Name of the pvc
 # username = get_spawner_username
-c.KubeSpawner.pvc_name_template = 'userdata-{username}'
+# c.KubeSpawner.pvc_name_template = 'userdata-{username}'
 
 # This will ensure pvc is created before spawning the pod
-c.KubeSpawner.storage_pvc_ensure = True
+# c.KubeSpawner.storage_pvc_ensure = True
 
 # debugging
 c.KubeSpawner.debug = True

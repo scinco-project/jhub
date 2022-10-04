@@ -398,10 +398,6 @@ def get_mounts(spawner):
                     "mountPath": "/agave_data_rw/current",
                     "name": current_safe_name,
                     "subPath": "current",
-                },
-                {
-                    "mountPath": "/home/jupyter/userdata",
-                    "name": f"userdata-{spawner.user.name}"
                 }
             ],
         }
@@ -423,10 +419,6 @@ def get_mounts(spawner):
         {
             "name": current_safe_name,
             "emptyDir": {},
-        },
-        {
-            "name": f"userdata-{spawner.user.name}",
-            "persistentVolumeClaim": {"claimName": f"userdata-{spawner.user.name}"}
         }
     ]
     spawner.volume_mounts = [
@@ -439,10 +431,6 @@ def get_mounts(spawner):
             "mountPath": "/home/jupyter/.agave",
             "name": current_safe_name,
             "subPath": "current",
-        },
-        {
-            "mountPath": "/home/jupyter/userdata",
-            "name": f"userdata-{spawner.user.name}"
         }
     ]
     volume_mounts = spawner.configs.get("volume_mounts")
