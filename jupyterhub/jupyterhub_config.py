@@ -111,12 +111,12 @@ c.TapisOAuthenticator.authorize_url = "{}/oauth2/authorize".format(
 )
 c.Authenticator.admin_users = CONFIGS.get("admin_users", [])
 
-c.JupyterHub.load_roles = [
- {
-   'name': 'server',
-   'scopes': ['inherit']
- }
-]
+# c.JupyterHub.load_roles = [
+#  {
+#    'name': 'server',
+#    'scopes': ['inherit']
+#  }
+# ]
 # The base URL of the entire application.
 #
 #  Add this to the beginning of all JupyterHub URLs. Use base_url to run
@@ -996,6 +996,7 @@ c.KubeSpawner.delete_stopped_pods = False
 # c.KubeSpawner.args = ['--allow-root']
 
 # setup
+c.KubeSpawner.nodeSelctor = {"prodnode": "true"}
 c.KubeSpawner.pre_spawn_hook = hook
 c.KubeSpawner.options_form = get_notebook_options
 c.KubeSpawner.options_from_form = parse_form_data
