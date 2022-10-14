@@ -996,7 +996,6 @@ c.KubeSpawner.delete_stopped_pods = False
 # c.KubeSpawner.args = ['--allow-root']
 
 # setup
-c.KubeSpawner.nodeSelctor = {"prodnode": "true"}
 c.KubeSpawner.pre_spawn_hook = hook
 c.KubeSpawner.options_form = get_notebook_options
 c.KubeSpawner.options_from_form = parse_form_data
