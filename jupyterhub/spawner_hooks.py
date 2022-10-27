@@ -118,8 +118,10 @@ def hook(spawner):
         spawner.mem_limit = max(mem_limits, key=mem_limits.get)
         spawner.cpu_limit = float(max(cpu_limits))
         # Set the guarantees really low because when None or 0,it sets a resource request for an amount equal to the limit
-        spawner.mem_guarantee = ".001K"
-        spawner.cpu_guarantee = float(0.001)
+        spawner.mem_guarantee = max(mem_limits, key=mem_limits.get)
+        spawner.cpu_guarantee = float(max(cpu_limits))
+        #spawner.mem_guarantee = ".001K"
+        #spawner.cpu_guarantee = float(0.001)
         spawner.environment = {
             "MKL_NUM_THREADS": max(cpu_limits),
             "NUMEXPR_NUM_THREADS": max(cpu_limits),
