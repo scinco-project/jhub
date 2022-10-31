@@ -348,8 +348,11 @@ def get_tas_data(spawner):
     if not spawner.tas_gid:
         spawner.tas_gid = spawner.configs.get("gid", spawner.tas_uid)
     spawner.log.info(
-        "Setting the following TAS data: uid:{} gid:{} homedir:{}".format(
-            spawner.tas_uid, spawner.tas_gid, spawner.tas_homedir
+        # "Setting the following TAS data: uid:{} gid:{} homedir:{}".format(
+        #     spawner.tas_uid, spawner.tas_gid, spawner.tas_homedir
+        # )
+        "Setting the following TAS data: uid:{} gid:{}".format(
+            spawner.tas_uid, spawner.tas_gid
         )
     )
 
