@@ -402,7 +402,7 @@ def get_mounts(spawner):
                     "subPath": "current",
                 },
                 {
-                    "mountPath": "/home/jupyter/userdata",
+                    "mountPath": "/home/jovyan/userdata",
                     "name": f"userdata-{spawner.user.name}"
                 }
             ],
@@ -443,7 +443,7 @@ def get_mounts(spawner):
             "subPath": "current",
         },
         {
-            "mountPath": "/home/jupyter/userdata",
+            "mountPath": "/home/jovyan/userdata",
             "name": f"userdata-{spawner.user.name}"
         }
     ]
