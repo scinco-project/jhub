@@ -1,5 +1,5 @@
 # Configuration file for jupyterhub.
-from jupyterhub.spawner_hooks import hook, get_notebook_options, parse_form_data, get_pvc_name
+from jupyterhub.spawner_hooks import hook, get_notebook_options, parse_form_data
 from oauthenticator.agave import TapisOAuthenticator
 import os
 

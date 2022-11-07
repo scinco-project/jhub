@@ -578,6 +578,3 @@ def get_projects(spawner):
             )
     spawner.log.info(spawner.volumes)
     spawner.log.info(spawner.volume_mounts)
-
-def get_pvc_name(spawner):
-    return f'userdata-{spawner.user.name}'
