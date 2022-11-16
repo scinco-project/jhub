@@ -296,6 +296,7 @@ def get_tas_data(spawner):
         return
     try:
         data = rsp.json()
+        spawner.log.info("TAS DATA: %s", data)
     except Exception as e:
         spawner.log.error(
             "Did not get JSON from TAS API. rsp: {}"
@@ -308,6 +309,7 @@ def get_tas_data(spawner):
     try:
         spawner.tas_uid = data["result"]["uid"]
         spawner.tas_gid = data["result"]["gid"]
+        spawner.init_gid = data["result"]["gid"]
         spawner.tas_homedir = data["result"]["homeDirectory"]
     except Exception as e:
         spawner.log.error(
@@ -469,6 +471,11 @@ def get_mounts(spawner):
             if item["type"] == "nfs":
                 vol["server"] = item["server"]
 
+            if item["path"] == "/work2/{tas_homedir}":
+                spawner.log.info(spawner.init_gid)
+                if spawner.init_gid == 0:
+                    continue
+            
             spawner.volumes.append({"name": vol_name, item["type"]: vol})
 
             spawner.volume_mounts.append(
