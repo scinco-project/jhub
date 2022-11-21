@@ -3,7 +3,6 @@ import string
 import sys
 import json
 
-from agavepy.agave import Agave
 from tapipy.tapis import Tapis
 
 INSTANCE = os.environ.get("INSTANCE")

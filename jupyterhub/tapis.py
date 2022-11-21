@@ -1,5 +1,5 @@
 """
-Custom Authenticator to use Agave OAuth with JupyterHub
+Custom Authenticator to use Tapis OAuth with JupyterHub
 """
 
 import json

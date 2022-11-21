@@ -5,8 +5,9 @@ import os
 import re
 import requests
 
+from tornado import web
+from ldap3 import Server, Connection, SAFE_SYNC
 from agavepy.agave import Agave
-#from tapipy.tapis import Tapis
 from jupyterhub.common import (
     TENANT,
     INSTANCE,
@@ -16,8 +17,6 @@ from jupyterhub.common import (
     safe_string,
     get_user_configs,
 )
-from tornado import web
-from ldap3 import Server, Connection, SAFE_SYNC
 
 # TAS configuration:
 # base URL for TAS API.
@@ -136,17 +135,6 @@ def merge_configs(x, y):
     for key, value in merged_pod_config.items():
         if key in x and key in y:
             merged_pod_config[key].update(x[key])
-
-
-def get_oauth_client(base_url, access_token, refresh_token):
-    return Agave(api_server=base_url, token=access_token, refresh_token=refresh_token)
-
-
-def get_tapis_oauth_client(base_url, access_token, refresh_token):
-    return Tapis(
-        base_url=base_url, access_token=access_token, refresh_token=refresh_token
-    )
-
 
 async def get_notebook_options(spawner):
     spawner.configs = get_tenant_configs()
