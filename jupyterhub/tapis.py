@@ -140,7 +140,7 @@ class TapisOAuthenticator(OAuthenticator):
                 os.path.join(self.get_user_token_dir(username), ".agpy")
             )
         )
-        self.log.info("agavepy cache file data: {}".format(d))
+        self.log.info(f"agavepy cache file data: {d}")
         self.create_configmap(username, ".agpy", json.dumps(d))
 
         # cli file

@@ -509,6 +509,7 @@ def get_projects(spawner):
         return None
 
     projects = data.get("mounts")
+    spawner.network_storage = spawner.configs.get('network_storage')
 
     try:
         spawner.log.info("Found {} projects".format(len(projects)))
@@ -538,7 +539,7 @@ def get_projects(spawner):
                 {
                     'name': name,
                     "nfs": {
-                        "server": "129.114.52.151",
+                        "server": spawner.network_storage,
                         "path": path,
                         "readOnly": readOnly,
                     },

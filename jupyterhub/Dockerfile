@@ -10,6 +10,7 @@ RUN pip install pyjwt[crypto]
 RUN pip install --upgrade pip
 RUN pip install tapipy --ignore-installed certifi 
 RUN pip install ldap3
+RUN pip install jupyter_server>=2.0.0
 
 # COPY requirements.txt /home/requirements.txt
 # RUN pip install -r /home/requirements.txt
@@ -20,6 +21,7 @@ ADD selenium/ /srv/jupyterhub/selenium
 ADD spawner_hooks.py /usr/local/lib/python3.10/dist-packages/jupyterhub/spawner_hooks.py
 ADD jupyterhub_config.py /srv/jupyterhub/jupyterhub_config.py
 ADD custom_templates /usr/local/share/jupyterhub/templates/custom_templates
+ADD admin-react.js /usr/local/share/jupyterhub/static/js/admin-react.js
 
 
 # FROM taccsciapps/jupyterhub:2.0.5

@@ -19,13 +19,15 @@ if not tapis_service_token:
 
 
 def get_config_metadata_name():
-    return "config.{}.{}.jhub".format(TENANT, INSTANCE)
+    """Return name of config metadata"""
+    return f"config.{TENANT}.{INSTANCE}.jhub"
 
 
 def get_tenant_configs():
+    """Retrive tenant config from metadata"""
     t = Tapis(base_url=tapis_base_url, jwt=tapis_service_token)
     q = {"name": get_config_metadata_name()}
-    print("tenant query: {}".format(q))
+    print(f"tenant query: {q}")
     metadata = json.loads(
         t.meta.listDocuments(db=database, collection=collection, filter=json.dumps(q))
     )[0]["value"]
@@ -33,9 +35,10 @@ def get_tenant_configs():
 
 
 def get_user_configs(username):
+    """Retrieve any groups user belongs to"""
     t = Tapis(base_url=tapis_base_url, jwt=tapis_service_token)
     q = {"value.user": username, "value.tenant": TENANT, "value.instance": INSTANCE}
-    print("user query: {}".format(q))
+    print(f"user query: {q}")
     metadata = json.loads(
         t.meta.listDocuments(db=database, collection=collection, filter=json.dumps(q))
     )
@@ -43,20 +46,21 @@ def get_user_configs(username):
 
 
 def safe_string(
-    to_escape, safe=set(string.ascii_lowercase + string.digits), escape_char="-"
+    to_escape, safe=None, escape_char="-"
 ):
     """Escape a string so that it only contains characters in a safe set.
     Characters outside the safe list will be escaped with _%x_,
     where %x is the hex value of the character.
     """
-
+    if safe is None:
+        safe = set(string.ascii_lowercase + string.digits)
     chars = []
     for c in to_escape:
         if c in safe:
             chars.append(c)
         else:
             chars.append(_escape_char(c, escape_char))
-    return u"".join(chars)
+    return "".join(chars)
 
 
 if sys.version_info >= (3,):
@@ -74,5 +78,5 @@ def _escape_char(c, escape_char):
     buf = []
     for byte in c.encode("utf8"):
         buf.append(escape_char)
-        buf.append("%X" % _ord(byte))
+        buf.append(f"{_ord(byte)}")
     return "".join(buf)
