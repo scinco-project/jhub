@@ -10,7 +10,6 @@ RUN pip install pyjwt[crypto]
 RUN pip install --upgrade pip
 RUN pip install tapipy --ignore-installed certifi 
 RUN pip install ldap3
-RUN pip install jupyter_server>=2.0.0
 
 # COPY requirements.txt /home/requirements.txt
 # RUN pip install -r /home/requirements.txt
