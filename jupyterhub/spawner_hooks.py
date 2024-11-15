@@ -4,18 +4,19 @@ import json
 import os
 import re
 import requests
+import time
+import jwt
 
 from tornado import web
 from ldap3 import Server, Connection, SAFE_SYNC
-from agavepy.agave import Agave
 from jupyterhub.common import (
     TENANT,
     INSTANCE,
-    base_url,
-    v2_token_url,
     get_tenant_configs,
     safe_string,
     get_user_configs,
+    refresh_access_token,
+    save_token
 )
 
 # TAS configuration:
@@ -32,14 +33,14 @@ def hook(spawner):
     spawner.log.info("👽 user configs 👽 {}".format(spawner.user_configs))
     spawner.log.info("😱 user options (from form) 😱 {}".format(spawner.user_options))
 
-    get_agave_access_data(spawner)
+    get_tapis_access_data(spawner)
     spawner.log.info(
         "access token: {}, refresh token: {}, url: {}".format(
             spawner.access_token, spawner.refresh_token, spawner.url
         )
     )
     # check if access token is valid
-    
+
     get_tas_data(spawner)
 
     spawner.uid = int(spawner.configs.get("uid", spawner.tas_uid))
@@ -47,7 +48,11 @@ def hook(spawner):
 
     spawner.extra_pod_config = spawner.configs.get("extra_pod_config", {})
     spawner.extra_container_config = spawner.configs.get("extra_container_config", {})
-    
+
+    for user_conf in spawner.user_configs:
+        if 'extra_pod_config' in user_conf['value']:
+            merge_configs(user_conf['value']['extra_pod_config'], spawner.extra_pod_config)
+
     if (
         len(spawner.configs.get("images")) == 1 and not spawner.hpc_available
     ):  # only 1 image option, so we skipped the form
@@ -93,6 +98,8 @@ def hook(spawner):
             raise web.HTTPError(403)
 
         spawner.image = image["name"]
+        spawner.log.info(image)
+        spawner.log.info(spawner.extra_pod_config)
         if image.get("extra_pod_config"):
             merge_configs(image["extra_pod_config"], spawner.extra_pod_config)
         if image.get("extra_container_config"):
@@ -127,14 +134,18 @@ def hook(spawner):
             "SCINCO_JUPYTERHUB_IMAGE": spawner.image,
         }
     get_mounts(spawner)
-    get_projects(spawner)
 
 
 def merge_configs(x, y):
     merged_pod_config = {**x, **y}
     for key, value in merged_pod_config.items():
         if key in x and key in y:
-            merged_pod_config[key].update(x[key])
+            if type(x[key]) is list:
+                for z in x[key]:
+                    merged_pod_config[key].append(z)
+            else:
+                merged_pod_config[key].update(x[key])
+
 
 async def get_notebook_options(spawner):
     spawner.configs = get_tenant_configs()
@@ -212,29 +223,28 @@ async def get_notebook_options(spawner):
         spawner.log.info(select_images)
         return "{}{}{}".format(select_images, image_description, hpc)
 
+
 async def parse_form_data(formdata, spawner):
     spawner.log.info(f"FORM DATA: {formdata}")
     return formdata
 
 
-def get_agave_access_data(spawner):
+def get_tapis_access_data(spawner):
     """
-    Returns the access token and base URL cached in the agavepy file
+    Returns the access token and base URL cached in the tapipy file
     :return:
     """
     # TODO figure out naming conventions that can follow k8 rules
     # k8 names must consist of lower case alphanumeric characters, '-' or '.',
     # and must start and end with an alphanumeric character
     # do all tenant names follow that? usernames?
-    token_file = os.path.join(get_user_token_dir(spawner.user.name), ".agpy")
+    token_file = os.path.join(get_user_token_dir(spawner.user.name), ".tapipy")
     spawner.log.info(
-        "spawner looking for token file: {} for user: {}".format(
-            token_file, spawner.user.name
-        )
+        f"spawner looking for token file: {token_file} for user: {spawner.user.name}"
     )
     if not os.path.exists(token_file):
         spawner.log.warning(
-            "spawner did not find a token file at {}".format(token_file)
+            f"spawner did not find a token file at {token_file}"
         )
         return None
     try:
@@ -245,11 +255,31 @@ def get_agave_access_data(spawner):
 
     try:
         spawner.access_token = data[0]["token"]
-        spawner.log.info("Setting token: {}".format(spawner.access_token))
-        spawner.refresh_token = data[0]["refresh_token"]
-        spawner.log.info("Setting refresh token: {}".format(spawner.refresh_token))
+        try:
+            decoded_data = jwt.decode(data[0]["token"], options={"verify_signature": False})
+        except Exception as e:
+            print(f"Error decoding access token: {e}")
+
+        refresh_data = None
+        if 'exp' in decoded_data and decoded_data['exp'] < time.time():
+            spawner.log.info(f"{spawner.user.name} has expired access token, attempting to refresh")
+            refresh_data = refresh_access_token(data[0]["refresh_token"], spawner.user.name)
+            spawner.log.info(f"Data retrieved from refreshing: {refresh_data}")
+
+        if refresh_data:
+            spawner.log.info(f"Refreshed access token for: {spawner.user.name}, attempting to save and update tapipy files")
+            save_token(refresh_data['access_token'], refresh_data['refresh_token'], spawner.user.name, refresh_data['created_at'], refresh_data['expires_in'], refresh_data['expires_at'])
+            spawner.access_token = refresh_data['access_token']
+            spawner.log.info(f"Setting token: {spawner.access_token}")
+            spawner.refresh_token = refresh_data['refresh_token']
+            spawner.log.info(f"Setting refresh token: {spawner.refresh_token}")
+        else:
+            spawner.log.info(f"Setting token: {spawner.access_token}")
+            spawner.refresh_token = data[0]["refresh_token"]
+            spawner.log.info(f"Setting refresh token: {spawner.refresh_token}")
+
         spawner.url = data[0]["api_server"]
-        spawner.log.info("Setting url: {}".format(spawner.url))
+        spawner.log.info(f"Setting url: {spawner.url}")
 
     except (TypeError, KeyError):
         spawner.log.warning(
@@ -307,7 +337,7 @@ def get_tas_data(spawner):
             )
         )
         return
-    
+
     gids = []
 
     try:
@@ -329,7 +359,7 @@ def get_tas_data(spawner):
             "Did not get gid's from ldap. rsp: {}"
             .format(e)
         )
-    
+
     if gids:
         spawner.supplemental_gids = gids
 
@@ -348,19 +378,15 @@ def get_tas_data(spawner):
 
 
 def get_user_token_dir(username):
-    return os.path.join("/agave/jupyter/tokens", INSTANCE, TENANT, username)
+    return os.path.join("/tapis/jupyter/tokens", INSTANCE, TENANT, username)
 
 
 def get_mounts(spawner):
     safe_username = safe_string(spawner.user.name).lower()
     safe_tenant = safe_string(TENANT).lower()
     safe_instance = safe_string(INSTANCE).lower()
-    agpy_safe_name = "{}-{}-{}-jhub-agpy".format(
-        safe_username, safe_tenant, safe_instance
-    )
-    current_safe_name = "{}-{}-{}-jhub-current".format(
-        safe_username, safe_tenant, safe_instance
-    )
+    tapipy_safe_name = f"{safe_username}-{safe_tenant}-{safe_instance}-jhub-tapipy"
+    current_safe_name = f"{safe_username}-{safe_tenant}-{safe_instance}-jhub-current"
 
     spawner.init_containers = [
         {
@@ -369,62 +395,62 @@ def get_mounts(spawner):
             "command": [
                 "/bin/sh",
                 "-c",
-                "cp -r /agave_data/.agpy /agave_data_rw/.agpy && cp -r /agave_data/current /agave_data_rw/current && ls -lah /agave_data_rw && cat /agave_data_rw/current/current && chmod -R 777 /agave_data_rw && ls -lah /agave_data_rw",
+                "cp -r /tapis_data/.tapipy /tapis_data_rw/.tapipy && cp -r /tapis_data/current /tapis_data_rw/current && ls -lah /tapis_data_rw && cat /tapis_data_rw/current/current && chmod -R 777 /tapis_data_rw && ls -lah /tapis_data_rw",
             ],
             "volumeMounts": [
                 {
-                    "mountPath": "/agave_data/.agpy",
-                    "name": "{}-configmap".format(agpy_safe_name),
-                    "subPath": ".agpy",
+                    "mountPath": "/tapis_data/.tapipy",
+                    "name": f"{tapipy_safe_name}-configmap",
+                    "subPath": ".tapipy",
                 },
                 {
-                    "mountPath": "/agave_data/current",
-                    "name": "{}-configmap".format(current_safe_name),
+                    "mountPath": "/tapis_data/current",
+                    "name": f"{current_safe_name}-configmap",
                     "subPath": "current",
                 },
                 {
-                    "mountPath": "/agave_data_rw/.agpy",
-                    "name": agpy_safe_name,
-                    "subPath": ".agpy",
+                    "mountPath": "/tapis_data_rw/.tapipy",
+                    "name": tapipy_safe_name,
+                    "subPath": ".tapipy",
                 },
                 {
-                    "mountPath": "/agave_data_rw/current",
+                    "mountPath": "/tapis_data_rw/current",
                     "name": current_safe_name,
                     "subPath": "current",
-                }
+                },
             ],
         }
     ]
 
     spawner.volumes = [
         {
-            "name": "{}-configmap".format(agpy_safe_name),
-            "configMap": {"name": agpy_safe_name, "defaultMode": 0o0777},
+            "name": f"{tapipy_safe_name}-configmap",
+            "configMap": {"name": tapipy_safe_name, "defaultMode": 0o0777},
         },
         {
-            "name": "{}-configmap".format(current_safe_name),
+            "name": f"{current_safe_name}-configmap",
             "configMap": {"name": current_safe_name, "defaultMode": 0o0777},
         },
         {
-            "name": agpy_safe_name,
+            "name": tapipy_safe_name,
             "emptyDir": {},
         },
         {
             "name": current_safe_name,
             "emptyDir": {},
-        }
+        },
     ]
     spawner.volume_mounts = [
         {
-            "mountPath": "/etc/.agpy",
-            "name": agpy_safe_name,
-            "subPath": ".agpy/.agpy",
+            "mountPath": "/etc/.tapipy",
+            "name": tapipy_safe_name,
+            "subPath": ".tapipy/.tapipy",
         },
         {
-            "mountPath": "/home/jupyter/.agave",
+            "mountPath": "/home/jovyan/.tapis-token",
             "name": current_safe_name,
             "subPath": "current",
-        }
+        },
     ]
     volume_mounts = spawner.configs.get("volume_mounts")
 
@@ -463,7 +489,7 @@ def get_mounts(spawner):
                 spawner.log.info(spawner.init_gid)
                 if spawner.init_gid == 0:
                     continue
-            
+
             spawner.volumes.append({"name": vol_name, item["type"]: vol})
 
             spawner.volume_mounts.append(
@@ -471,106 +497,3 @@ def get_mounts(spawner):
             )
         spawner.log.info("volumes: {}".format(spawner.volumes))
         spawner.log.info("volume_mounts: {}".format(spawner.volume_mounts))
-
-
-def get_projects(spawner):
-    if not spawner.access_token:
-        spawner.log.info("no access_token")
-        return None
-    #url = "{}/projects/v2/".format(spawner.url)
-    projects_url = f"{base_url}/projects/v2"
-    
-    # use spawner.access_token to generate v2 token
-    # call v3 to v2 token endpoint
-    # tacc.develop.tapis.io/v3/oauth2/v2/token
-    spawner.log.error("getting projects")
-    try:
-        token_url = v2_token_url
-        headers = {
-            'x-tapis-token': spawner.access_token
-        }
-        rsp = requests.post(token_url, headers=headers)
-        rsp.raise_for_status()
-        access_token = rsp.json()['access_token']
-    except Exception as e:
-        spawner.log.error(f"Unable to generate v2 token; error: {e}; response: {rsp}")
-        return None
-
-    # with v2 token, send request to projects url
-    try:
-        ag = Agave(api_server=base_url, token=access_token)
-        rsp = ag.geturl(projects_url)
-        rsp.raise_for_status()
-        data = rsp.json()
-    except Exception as e:
-        spawner.log.warn(f"Did not get data from /projects. Exception: {e}")
-        spawner.log.warn(f"Full response from service: {rsp}")
-        spawner.log.warn(f"url used: {projects_url}")
-        return None
-
-    projects = data.get("mounts")
-    spawner.network_storage = spawner.configs.get('network_storage')
-
-    try:
-        spawner.log.info("Found {} projects".format(len(projects)))
-    except TypeError:
-        spawner.log.error("Projects data has no length.")
-        spawner.log.info(f"response: {rsp}, data: {data}")
-        return None
-
-    for p in projects:
-        mountPath = p.get('mountPath')
-        path = p.get('path')
-        pems = p.get('pems')
-        readOnly = False if pems == 'rw' else True
-        source = ""
-        if path.split('/')[1] == 'work':
-            source = "work"
-            path = path.replace('work', 'work2', 1)
-        if path.split('/')[1] == 'corral-repl':
-            source = "corral"
-            path = path.replace('corral-repl', 'corral/main', 1)
-        # check if corral -- then use nfs, else, use hostPath
-        if source == "corral":
-            name = 'project-{}'.format(safe_string(mountPath).lower())
-            if len(name) > 63:
-                name = name[:62] + 'e'
-            spawner.volumes.append(
-                {
-                    'name': name,
-                    "nfs": {
-                        "server": spawner.network_storage,
-                        "path": path,
-                        "readOnly": readOnly,
-                    },
-                }
-            )
-
-            spawner.volume_mounts.append(
-                {
-                    "mountPath": f"/home/jovyan/projects{mountPath}",
-                    'name': name,
-                }
-            )
-        if source == "work":
-            name = 'project-{}'.format(safe_string(mountPath).lower())
-            if len(name) > 63:
-                name = name[:62] + 'e'
-            spawner.volumes.append(
-                {
-                    'name': name,
-                    "hostPath": {
-                        "path": path,
-                        "readOnly": readOnly,
-                    },
-                }
-            )
-
-            spawner.volume_mounts.append(
-                {
-                    "mountPath": f"/home/jovyan/projects{mountPath}",
-                    'name': name,
-                }
-            )
-    spawner.log.info(spawner.volumes)
-    spawner.log.info(spawner.volume_mounts)

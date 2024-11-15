@@ -108,6 +108,7 @@ c.TapisOAuthenticator.authorize_url = "{}/oauth2/authorize".format(
     CONFIGS.get("tapis_base_url").rstrip("/")
 )
 c.Authenticator.admin_users = CONFIGS.get("admin_users", [])
+c.Authenticator.allow_all = True
 
 # The base URL of the entire application.
 #
@@ -511,7 +512,7 @@ c.JupyterHub.template_paths = ["/usr/local/share/jupyterhub/templates/custom_tem
 #  documentation for your spawner to verify!
 # c.Spawner.cmd = ['jupyterhub-singleuser']
 c.Spawner.cmd = ["jupyterhub-singleuser"]
-c.Spawner.args = ["--collaborative"]
+# c.Spawner.args = ["--collaborative"]
 
 # Maximum number of consecutive failures to allow before shutting down
 #  JupyterHub.

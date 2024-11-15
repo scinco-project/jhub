@@ -18,7 +18,7 @@ from tornado.httpclient import HTTPRequest, AsyncHTTPClient
 from tornado.httputil import url_concat
 from traitlets import Set
 
-from jupyterhub.common import TENANT, INSTANCE, get_tenant_configs, safe_string
+from jupyterhub.common import TENANT, INSTANCE, get_tenant_configs, safe_string, get_user_token_dir
 from .oauth2 import OAuthLoginHandler, OAuthenticator
 
 CONFIGS = get_tenant_configs()
@@ -38,7 +38,7 @@ class TapisLoginHandler(OAuthLoginHandler, TapisMixin):
 
 
 class TapisOAuthenticator(OAuthenticator):
-    login_service = CONFIGS.get("agave_login_button_text")
+    login_service = CONFIGS.get("tapis_login_button_text")
     login_handler = TapisLoginHandler
 
     team_whitelist = Set(
@@ -106,22 +106,18 @@ class TapisOAuthenticator(OAuthenticator):
 
     def ensure_token_dir(self, username):
         try:
-            os.makedirs(self.get_user_token_dir(username))
+            os.makedirs(get_user_token_dir(username))
         except OSError as e:
             self.log.info(
                 "Got error trying to make token dir: "
-                "{} exception: {}".format(self.get_user_token_dir(username), e)
+                "{} exception: {}".format(get_user_token_dir(username), e)
             )
 
-    def get_user_token_dir(self, username):
-        return os.path.join("/agave/jupyter/tokens", INSTANCE, TENANT, username)
-
-    # Is this data used for accessing metadata, if so, this has to be tapis v2(agave) info
     def save_token(
         self, access_token, refresh_token, username, created_at, expires_in, expires_at
     ):
-        tenant_id = CONFIGS.get("agave_tenant_id")
-        # agavepy file
+        tenant_id = CONFIGS.get("tapis_tenant_id")
+        # tapipy file
         d = [
             {
                 "token": access_token,
@@ -133,35 +129,35 @@ class TapisOAuthenticator(OAuthenticator):
                 "verify": eval(CONFIGS.get("oauth_validate_cert")),
             }
         ]
-        with open(os.path.join(self.get_user_token_dir(username), ".agpy"), "w") as f:
+        with open(os.path.join(get_user_token_dir(username), ".tapipy"), "w") as f:
             json.dump(d, f)
         self.log.info(
-            "Saved agavepy cache file to {}".format(
-                os.path.join(self.get_user_token_dir(username), ".agpy")
+            "Saved tapipy cache file to {}".format(
+                os.path.join(get_user_token_dir(username), ".tapipy")
             )
         )
-        self.log.info(f"agavepy cache file data: {d}")
-        self.create_configmap(username, ".agpy", json.dumps(d))
+        self.log.info(f"tapipy cache file data: {d}")
+        self.create_configmap(username, ".tapipy", json.dumps(d))
 
         # cli file
         d = {
             "tenantid": tenant_id,
-            "baseurl": "{}".format(CONFIGS.get("agave_base_url").rstrip("/")),
+            "baseurl": "{}".format(CONFIGS.get("tapis_base_url").rstrip("/")),
             "devurl": "",
-            "apikey": CONFIGS.get("agave_client_id"),
+            "apikey": CONFIGS.get("tapis_client_id"),
             "username": username,
             "access_token": access_token,
             "refresh_token": refresh_token,
             "created_at": str(int(created_at)),
-            "apisecret": CONFIGS.get("agave_client_secret"),
+            "apisecret": CONFIGS.get("tapis_client_secret"),
             "expires_in": str(expires_in),
             "expires_at": str(expires_at),
         }
-        with open(os.path.join(self.get_user_token_dir(username), "current"), "w") as f:
+        with open(os.path.join(get_user_token_dir(username), "current"), "w") as f:
             json.dump(d, f)
         self.log.info(
             "Saved CLI cache file to {}".format(
-                os.path.join(self.get_user_token_dir(username), "current")
+                os.path.join(get_user_token_dir(username), "current")
             )
         )
         self.log.info("CLI cache file data: {}".format(d))
@@ -229,7 +225,7 @@ class TapisOAuthenticator(OAuthenticator):
             )
 
 
-class LocalAgaveOAuthenticator(LocalAuthenticator, TapisOAuthenticator):
+class LocalTapisOAuthenticator(LocalAuthenticator, TapisOAuthenticator):
     """A version that mixes in local system user creation"""
 
     pass
