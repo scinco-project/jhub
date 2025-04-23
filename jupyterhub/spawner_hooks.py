@@ -6,17 +6,21 @@ import re
 import requests
 import time
 import jwt
+import urllib3
+import certifi
 
 from tornado import web
 from ldap3 import Server, Connection, SAFE_SYNC
 from jupyterhub.common import (
     TENANT,
     INSTANCE,
+    RESTRICTED_ID,
+    RESTRICTED_LABEL,
     get_tenant_configs,
     safe_string,
     get_user_configs,
     refresh_access_token,
-    save_token
+    save_token,
 )
 
 # TAS configuration:
@@ -50,8 +54,10 @@ def hook(spawner):
     spawner.extra_container_config = spawner.configs.get("extra_container_config", {})
 
     for user_conf in spawner.user_configs:
-        if 'extra_pod_config' in user_conf['value']:
-            merge_configs(user_conf['value']['extra_pod_config'], spawner.extra_pod_config)
+        if "extra_pod_config" in user_conf["value"]:
+            merge_configs(
+                user_conf["value"]["extra_pod_config"], spawner.extra_pod_config
+            )
 
     if (
         len(spawner.configs.get("images")) == 1 and not spawner.hpc_available
@@ -68,7 +74,7 @@ def hook(spawner):
             for image in item["value"]["images"]:
                 spawner.log.info(f"Image: {image}")
                 image_options.append(image)
-        user_options = spawner.user_options        
+        user_options = spawner.user_options
         spawner.log.info(f"User options: {user_options}")
         image = ast.literal_eval(spawner.user_options["image"][0])
         spawner.log.info(f"Image: {image}")
@@ -79,7 +85,10 @@ def hook(spawner):
                 )
             )
             allowed_options = next(
-                option for option in image_options if option["name"] == image["name"] and option["display_name"] == image["display_name"]
+                option
+                for option in image_options
+                if option["name"] == image["name"]
+                and option["display_name"] == image["display_name"]
             )
             if spawner.user_options.get("hpc"):
                 if not eval(allowed_options.get("hpc_available", "False")):
@@ -147,8 +156,36 @@ def merge_configs(x, y):
                 merged_pod_config[key].update(x[key])
 
 
+def check_tas_for_user(spawner):
+    user = spawner.user.name
+    spawner.log.info(f"Check tas for restricted project for user: {user}")
+    http_headers = urllib3.make_headers(basic_auth=f"{TAS_ROLE_ACCT}:{TAS_ROLE_PASS}")
+    pool_manager = urllib3.PoolManager(
+        cert_reqs="CERT_REQUIRED",
+        ca_certs=certifi.where(),
+        retries=False,
+        headers=http_headers,
+    )
+    response = pool_manager.request("GET", f"{TAS_URL_BASE}/projects/username/{user}")
+    spawner.log.info(f"{TAS_URL_BASE}/projects/username/{user}")
+    json_response = json.loads(response.data.decode("utf-8"))
+    if "result" in json_response and len(json_response["result"]) == 1:
+        if str(json_response["result"][0]["id"]) == RESTRICTED_ID:
+            spawner.log.info(f"Found restricted project for user: {user}")
+            spawner.extra_labels = {"restrictedProject": RESTRICTED_LABEL}
+            return True
+
+    return False
+
+
 async def get_notebook_options(spawner):
-    spawner.configs = get_tenant_configs()
+    # Add call to TAS to check for allocation
+    restricted = check_tas_for_user(spawner)
+    spawner.log.info(f"Restricted? {restricted}")
+    # If user has allocation: keep as is
+    # spawner.configs = get_tenant_configs()
+    # If user only has specific "restricted" allocation: set spawner.configs to restricted metadata group
+    spawner.configs = get_tenant_configs(restricted)
     spawner.log.info(f"spawner configs: {spawner.configs}")
     spawner.user_configs = get_user_configs(spawner.user.name)
     spawner.log.info(f"spawner user configs: {spawner.configs}")
@@ -243,9 +280,7 @@ def get_tapis_access_data(spawner):
         f"spawner looking for token file: {token_file} for user: {spawner.user.name}"
     )
     if not os.path.exists(token_file):
-        spawner.log.warning(
-            f"spawner did not find a token file at {token_file}"
-        )
+        spawner.log.warning(f"spawner did not find a token file at {token_file}")
         return None
     try:
         data = json.load(open(token_file))
@@ -256,22 +291,37 @@ def get_tapis_access_data(spawner):
     try:
         spawner.access_token = data[0]["token"]
         try:
-            decoded_data = jwt.decode(data[0]["token"], options={"verify_signature": False})
+            decoded_data = jwt.decode(
+                data[0]["token"], options={"verify_signature": False}
+            )
         except Exception as e:
             print(f"Error decoding access token: {e}")
 
         refresh_data = None
-        if 'exp' in decoded_data and decoded_data['exp'] < time.time():
-            spawner.log.info(f"{spawner.user.name} has expired access token, attempting to refresh")
-            refresh_data = refresh_access_token(data[0]["refresh_token"], spawner.user.name)
+        if "exp" in decoded_data and decoded_data["exp"] < time.time():
+            spawner.log.info(
+                f"{spawner.user.name} has expired access token, attempting to refresh"
+            )
+            refresh_data = refresh_access_token(
+                data[0]["refresh_token"], spawner.user.name
+            )
             spawner.log.info(f"Data retrieved from refreshing: {refresh_data}")
 
         if refresh_data:
-            spawner.log.info(f"Refreshed access token for: {spawner.user.name}, attempting to save and update tapipy files")
-            save_token(refresh_data['access_token'], refresh_data['refresh_token'], spawner.user.name, refresh_data['created_at'], refresh_data['expires_in'], refresh_data['expires_at'])
-            spawner.access_token = refresh_data['access_token']
+            spawner.log.info(
+                f"Refreshed access token for: {spawner.user.name}, attempting to save and update tapipy files"
+            )
+            save_token(
+                refresh_data["access_token"],
+                refresh_data["refresh_token"],
+                spawner.user.name,
+                refresh_data["created_at"],
+                refresh_data["expires_in"],
+                refresh_data["expires_at"],
+            )
+            spawner.access_token = refresh_data["access_token"]
             spawner.log.info(f"Setting token: {spawner.access_token}")
-            spawner.refresh_token = refresh_data['refresh_token']
+            spawner.refresh_token = refresh_data["refresh_token"]
             spawner.log.info(f"Setting refresh token: {spawner.refresh_token}")
         else:
             spawner.log.info(f"Setting token: {spawner.access_token}")
@@ -341,24 +391,30 @@ def get_tas_data(spawner):
     gids = []
 
     try:
-        server = Server('ldaps://ldap.tacc.utexas.edu:636')
-        conn = Connection(server, 'uid=ldapbind,ou=People,dc=tacc,dc=utexas,dc=edu', LDAP_PASS, client_strategy=SAFE_SYNC, auto_bind=True)
-        status, result, response, _ = conn.search('ou=Groups,dc=tacc,dc=utexas,dc=edu', f'(uniqueMember=uid={spawner.user.name},ou=People,dc=tacc,dc=utexas,dc=edu)')
+        server = Server("ldaps://ldap.tacc.utexas.edu:636")
+        conn = Connection(
+            server,
+            "uid=ldapbind,ou=People,dc=tacc,dc=utexas,dc=edu",
+            LDAP_PASS,
+            client_strategy=SAFE_SYNC,
+            auto_bind=True,
+        )
+        status, result, response, _ = conn.search(
+            "ou=Groups,dc=tacc,dc=utexas,dc=edu",
+            f"(uniqueMember=uid={spawner.user.name},ou=People,dc=tacc,dc=utexas,dc=edu)",
+        )
         for entry in response:
-            data = entry['dn'].split(',')
-            cn = data[0].split('=')
+            data = entry["dn"].split(",")
+            cn = data[0].split("=")
             group = cn[1]
-            temp_gid = group.split('-')[1]
+            temp_gid = group.split("-")[1]
             try:
                 gid = int(temp_gid)
                 gids.append(gid)
-            except Exception as e:
+            except Exception:
                 continue
     except Exception as e:
-        spawner.log.error(
-            "Did not get gid's from ldap. rsp: {}"
-            .format(e)
-        )
+        spawner.log.error("Did not get gid's from ldap. rsp: {}".format(e))
 
     if gids:
         spawner.supplemental_gids = gids
@@ -475,7 +531,7 @@ def get_mounts(spawner):
             # volume names must consist of lower case alphanumeric characters or '-',
             # and must start and end with an alphanumeric character (e.g. 'my-name',  or '123-abc',
             # regex used for validation is '[a-z0-9]([-a-z0-9]*[a-z0-9])?')
-            if item["mountPath"][-1] == '/':
+            if item["mountPath"][-1] == "/":
                 item["mountPath"] = item["mountPath"][:-1]
             vol_name = re.sub(
                 r"([^a-z0-9-\s]+?)", "", item["mountPath"].split("/")[-1].lower()
