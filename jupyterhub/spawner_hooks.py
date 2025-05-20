@@ -21,6 +21,7 @@ from jupyterhub.common import (
     get_user_configs,
     refresh_access_token,
     save_token,
+    tapis_base_url
 )
 
 # TAS configuration:
@@ -45,10 +46,13 @@ def hook(spawner):
     )
     # check if access token is valid
 
-    get_tas_data(spawner)
-
-    spawner.uid = int(spawner.configs.get("uid", spawner.tas_uid))
-    spawner.gid = int(spawner.configs.get("gid", spawner.tas_gid))
+    if 'training' not in tapis_base_url:
+        get_tas_data(spawner)
+        spawner.uid = spawner.tas_uid
+        spawner.gid = spawner.tas_gid
+    else:
+        spawner.uid = 100
+        spawner.gid = 100
 
     spawner.extra_pod_config = spawner.configs.get("extra_pod_config", {})
     spawner.extra_container_config = spawner.configs.get("extra_container_config", {})
@@ -169,11 +173,12 @@ def check_tas_for_user(spawner):
     response = pool_manager.request("GET", f"{TAS_URL_BASE}/projects/username/{user}")
     spawner.log.info(f"{TAS_URL_BASE}/projects/username/{user}")
     json_response = json.loads(response.data.decode("utf-8"))
-    if "result" in json_response and len(json_response["result"]) == 1:
-        if str(json_response["result"][0]["id"]) == RESTRICTED_ID:
-            spawner.log.info(f"Found restricted project for user: {user}")
-            spawner.extra_labels = {"restrictedProject": RESTRICTED_LABEL}
-            return True
+    if json_response:
+        if "result" in json_response and json_response["result"] is not None and len(json_response["result"]) == 1:
+            if str(json_response["result"][0]["id"]) == RESTRICTED_ID:
+                spawner.log.info(f"Found restricted project for user: {user}")
+                spawner.extra_labels = {"restrictedProject": RESTRICTED_LABEL}
+                return True
 
     return False
 
