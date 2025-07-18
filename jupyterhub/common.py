@@ -1,10 +1,10 @@
+import json
 import os
 import string
 import sys
-import json
-import requests
 import time
 
+import requests
 from tapipy.tapis import Tapis
 
 INSTANCE = os.environ.get("INSTANCE")
@@ -13,6 +13,7 @@ RESTRICTED_ID = os.environ.get("RESTRICTED_ID", "66657")
 RESTRICTED_LABEL = os.environ.get("RESTRICTED_LABEL", "hetdex")
 tapis_service_token = os.environ.get("TAPIS_SERVICE_TOKEN")
 tapis_base_url = os.environ.get("TAPIS_BASE_URL", "https://tacc.tapis.io")
+meta_base_url = os.environ.get("META_BASE_URL", "https://tacc.tapis.io")
 database = os.environ.get("TAPIS_DATABASE")
 collection = os.environ.get("TAPIS_COLLECTION")
 
@@ -32,7 +33,7 @@ def get_config_metadata_name(restricted):
 
 def get_tenant_configs(restricted=False):
     """Retrive tenant config from metadata"""
-    t = Tapis(base_url=tapis_base_url, jwt=tapis_service_token)
+    t = Tapis(base_url=meta_base_url, jwt=tapis_service_token)
     q = {"name": get_config_metadata_name(restricted)}
     print(f"tenant query: {q}")
     metadata = json.loads(
@@ -43,7 +44,7 @@ def get_tenant_configs(restricted=False):
 
 def get_user_configs(username):
     """Retrieve any groups user belongs to"""
-    t = Tapis(base_url=tapis_base_url, jwt=tapis_service_token)
+    t = Tapis(base_url=meta_base_url, jwt=tapis_service_token)
     q = {"value.user": username, "value.tenant": TENANT, "value.instance": INSTANCE}
     print(f"user query: {q}")
     metadata = json.loads(

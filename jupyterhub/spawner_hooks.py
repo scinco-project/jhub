@@ -1,28 +1,28 @@
 import ast
-import humanfriendly
 import json
 import os
 import re
-import requests
 import time
-import jwt
-import urllib3
-import certifi
 
-from tornado import web
-from ldap3 import Server, Connection, SAFE_SYNC
+import certifi
+import humanfriendly
+import jwt
+import requests
+import urllib3
 from jupyterhub.common import (
-    TENANT,
     INSTANCE,
     RESTRICTED_ID,
     RESTRICTED_LABEL,
+    TENANT,
     get_tenant_configs,
-    safe_string,
     get_user_configs,
     refresh_access_token,
+    safe_string,
     save_token,
-    tapis_base_url
+    tapis_base_url,
 )
+from ldap3 import SAFE_SYNC, Connection, Server
+from tornado import web
 
 # TAS configuration:
 # base URL for TAS API.
@@ -38,6 +38,27 @@ def hook(spawner):
     spawner.log.info("👽 user configs 👽 {}".format(spawner.user_configs))
     spawner.log.info("😱 user options (from form) 😱 {}".format(spawner.user_options))
 
+    # Add call to TAS to get allocation data for user
+    tas_data = get_user_projects(spawner)
+
+    # Check response from TAS to check for any allocation
+    allowed = is_user_allowed(spawner, tas_data)
+    if not allowed:
+        raise web.HTTPError(403)
+
+    # Check if user only has restricted allocation
+    restricted = is_user_restricted(spawner, tas_data)
+    spawner.log.info(f"Restricted? {restricted}")
+    # If user has allocation: keep as is
+    # spawner.configs = get_tenant_configs()
+    # If user only has specific "restricted" allocation:
+    # set spawner.configs to restricted metadata group
+    if restricted:
+        spawner.configs = get_tenant_configs(restricted)
+        spawner.log.info(f"spawner configs: {spawner.configs}")
+        spawner.user_configs = get_user_configs(spawner.user.name)
+        spawner.log.info(f"spawner user configs: {spawner.configs}")
+
     get_tapis_access_data(spawner)
     spawner.log.info(
         "access token: {}, refresh token: {}, url: {}".format(
@@ -46,7 +67,7 @@ def hook(spawner):
     )
     # check if access token is valid
 
-    if 'training' not in tapis_base_url:
+    if "training" not in tapis_base_url:
         get_tas_data(spawner)
         spawner.uid = spawner.tas_uid
         spawner.gid = spawner.tas_gid
@@ -136,7 +157,8 @@ def hook(spawner):
         )
         spawner.mem_limit = max(mem_limits, key=mem_limits.get)
         spawner.cpu_limit = float(max(cpu_limits))
-        # Set the guarantees really low because when None or 0,it sets a resource request for an amount equal to the limit
+        # Set the guarantees really low because when None or 0,
+        # it sets a resource request for an amount equal to the limit
         spawner.mem_guarantee = ".001K"
         spawner.cpu_guarantee = float(0.001)
         spawner.environment = {
@@ -160,9 +182,8 @@ def merge_configs(x, y):
                 merged_pod_config[key].update(x[key])
 
 
-def check_tas_for_user(spawner):
+def get_user_projects(spawner):
     user = spawner.user.name
-    spawner.log.info(f"Check tas for restricted project for user: {user}")
     http_headers = urllib3.make_headers(basic_auth=f"{TAS_ROLE_ACCT}:{TAS_ROLE_PASS}")
     pool_manager = urllib3.PoolManager(
         cert_reqs="CERT_REQUIRED",
@@ -173,24 +194,30 @@ def check_tas_for_user(spawner):
     response = pool_manager.request("GET", f"{TAS_URL_BASE}/projects/username/{user}")
     spawner.log.info(f"{TAS_URL_BASE}/projects/username/{user}")
     json_response = json.loads(response.data.decode("utf-8"))
-    if json_response:
-        if "result" in json_response and json_response["result"] is not None and len(json_response["result"]) == 1:
-            if str(json_response["result"][0]["id"]) == RESTRICTED_ID:
-                spawner.log.info(f"Found restricted project for user: {user}")
-                spawner.extra_labels = {"restrictedProject": RESTRICTED_LABEL}
-                return True
+    return json_response
+
+
+def is_user_allowed(spawner, tas_data):
+    user = spawner.user.name
+    spawner.log.info(f"Check if user has any allocation: {user}")
+    return bool(tas_data.get("result"))
+
+
+def is_user_restricted(spawner, tas_data):
+    user = spawner.user.name
+    spawner.log.info(f"Check tas for restricted project for user: {user}")
+    if len(tas_data["result"]) == 1:
+        item_id = tas_data["result"][0].get("id")
+        if item_id is not None and str(item_id) == RESTRICTED_ID:
+            spawner.log.info(f"Found restricted project for user: {user}")
+            spawner.extra_labels = {"restrictedProject": RESTRICTED_LABEL}
+            return True
 
     return False
 
 
 async def get_notebook_options(spawner):
-    # Add call to TAS to check for allocation
-    restricted = check_tas_for_user(spawner)
-    spawner.log.info(f"Restricted? {restricted}")
-    # If user has allocation: keep as is
-    # spawner.configs = get_tenant_configs()
-    # If user only has specific "restricted" allocation: set spawner.configs to restricted metadata group
-    spawner.configs = get_tenant_configs(restricted)
+    spawner.configs = get_tenant_configs()
     spawner.log.info(f"spawner configs: {spawner.configs}")
     spawner.user_configs = get_user_configs(spawner.user.name)
     spawner.log.info(f"spawner user configs: {spawner.configs}")

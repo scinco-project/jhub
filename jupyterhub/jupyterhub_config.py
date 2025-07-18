@@ -1,9 +1,9 @@
 # Configuration file for jupyterhub.
-from jupyterhub.spawner_hooks import hook, get_notebook_options, parse_form_data
-from oauthenticator.tapis import TapisOAuthenticator
 import os
 
 from jupyterhub.common import get_tenant_configs
+from jupyterhub.spawner_hooks import get_notebook_options, hook, parse_form_data
+from oauthenticator.tapis import TapisOAuthenticator
 
 CONFIGS = get_tenant_configs()
 print(CONFIGS)
@@ -85,7 +85,7 @@ c.JupyterHub.admin_access = True
 #  - takes two arguments: (handler, data),
 #    where `handler` is the calling web.RequestHandler,
 #    and `data` is the POST form data from the login page.
-#c.JupyterHub.tornado_settings = {"cookie_options": {"samesite": "None", "Secure": True}}
+# c.JupyterHub.tornado_settings = {"cookie_options": {"samesite": "None", "Secure": True}}
 # c.JupyterHub.tornado_settings = {
 #     'headers': {
 #         'Content-Security-Policy': 'frame-ancestors *',
