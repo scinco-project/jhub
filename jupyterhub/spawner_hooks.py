@@ -217,6 +217,11 @@ def is_user_restricted(spawner, tas_data):
 
 
 async def get_notebook_options(spawner):
+    spawner.configs = get_tenant_configs()
+    spawner.log.info(f"spawner configs: {spawner.configs}")
+    spawner.user_configs = get_user_configs(spawner.user.name)
+    spawner.log.info(f"spawner user configs: {spawner.configs}")
+
     image_options = spawner.configs.get("images")
 
     for item in spawner.user_configs:
