@@ -131,12 +131,12 @@ class TapisOAuthenticator(OAuthenticator):
         ]
         with open(os.path.join(get_user_token_dir(username), ".tapipy"), "w") as f:
             json.dump(d, f)
-        self.log.info(
-            "Saved tapipy cache file to {}".format(
-                os.path.join(get_user_token_dir(username), ".tapipy")
-            )
-        )
-        self.log.info(f"tapipy cache file data: {d}")
+        # self.log.info(
+        #     "Saved tapipy cache file to {}".format(
+        #         os.path.join(get_user_token_dir(username), ".tapipy")
+        #     )
+        # )
+        # self.log.info(f"tapipy cache file data: {d}")
         self.create_configmap(username, ".tapipy", json.dumps(d))
 
         # cli file
@@ -155,12 +155,12 @@ class TapisOAuthenticator(OAuthenticator):
         }
         with open(os.path.join(get_user_token_dir(username), "current"), "w") as f:
             json.dump(d, f)
-        self.log.info(
-            "Saved CLI cache file to {}".format(
-                os.path.join(get_user_token_dir(username), "current")
-            )
-        )
-        self.log.info("CLI cache file data: {}".format(d))
+        # self.log.info(
+        #     "Saved CLI cache file to {}".format(
+        #         os.path.join(get_user_token_dir(username), "current")
+        #     )
+        # )
+        # self.log.info("CLI cache file data: {}".format(d))
         self.create_configmap(username, "current", json.dumps(d))
 
     def create_configmap(self, username, name, d):
@@ -200,13 +200,13 @@ class TapisOAuthenticator(OAuthenticator):
             },
         )
 
-        self.log.info("{}:{}".format("configmap body", body))
+        # self.log.info("{}:{}".format("configmap body", body))
 
         try:  # delete any current configmaps to ensure no stale tokens
             api_response = api_instance.delete_namespaced_config_map(
                 configmap_name, namespace
             )
-            self.log.info("{} configmap deleted".format(configmap_name))
+            # self.log.info("{} configmap deleted".format(configmap_name))
             print(str(api_response))
         except Exception as e:
             print(
@@ -216,7 +216,7 @@ class TapisOAuthenticator(OAuthenticator):
 
         try:
             api_response = api_instance.create_namespaced_config_map(namespace, body)
-            self.log.info("{} configmap created".format(name))
+            # self.log.info("{} configmap created".format(name))
             print(str(api_response))
         except Exception as e:
             print(

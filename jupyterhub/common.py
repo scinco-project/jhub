@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import string
 import sys
@@ -7,11 +8,15 @@ import time
 import requests
 from tapipy.tapis import Tapis
 
+logger = logging.getLogger("JupyterHub")
+
 INSTANCE = os.environ.get("INSTANCE")
 TENANT = os.environ.get("TENANT")
 RESTRICTED_ID = os.environ.get("RESTRICTED_ID", "66657")
 RESTRICTED_LABEL = os.environ.get("RESTRICTED_LABEL", "hetdex")
 tapis_service_token = os.environ.get("TAPIS_SERVICE_TOKEN")
+portals_service_token = os.environ.get("PORTALS_SERVICE_TOKEN")
+portals_base_url = os.environ.get("PORTALS_BASE_URL", "https://portals.tapis.io")
 tapis_base_url = os.environ.get("TAPIS_BASE_URL", "https://tacc.tapis.io")
 meta_base_url = os.environ.get("META_BASE_URL", "https://tacc.tapis.io")
 database = os.environ.get("TAPIS_DATABASE")
@@ -20,6 +25,15 @@ collection = os.environ.get("TAPIS_COLLECTION")
 
 if not tapis_service_token:
     raise Exception("Missing TAPIS_SERVICE_TOKEN configuration.")
+
+
+def get_metadata(t, q):
+    try:
+        response = json.loads(t.meta.listDocuments(db=database, collection=collection, filter=json.dumps(q)))
+    except Exception as e:
+        logger.error(f"Unable to get metadata, error: {e}")
+        return None
+    return response
 
 
 def get_config_metadata_name(restricted):
@@ -31,38 +45,42 @@ def get_config_metadata_name(restricted):
     )
 
 
-def get_tenant_configs(restricted=False):
+def get_tenant_configs(restricted=False, retry=True):
     """Retrive tenant config from metadata"""
     t = Tapis(base_url=meta_base_url, jwt=tapis_service_token)
     q = {"name": get_config_metadata_name(restricted)}
-    print(f"tenant query: {q}")
-    metadata = json.loads(
-        t.meta.listDocuments(db=database, collection=collection, filter=json.dumps(q))
-    )[0]["value"]
-    return metadata
+    metadata = get_metadata(t, q)
+    if not metadata:
+        if retry:
+            time.sleep(1)
+            return get_tenant_configs(restricted, False)
+        return None
+    logger.info(f"Loaded tenant config: {metadata}")
+    return metadata[0]["value"]
 
 
-def get_user_configs(username):
+def get_user_configs(username, retry=True):
     """Retrieve any groups user belongs to"""
     t = Tapis(base_url=meta_base_url, jwt=tapis_service_token)
     q = {"value.user": username, "value.tenant": TENANT, "value.instance": INSTANCE}
-    print(f"user query: {q}")
-    metadata = json.loads(
-        t.meta.listDocuments(db=database, collection=collection, filter=json.dumps(q))
-    )
+    metadata = get_metadata(t, q)
+    if not metadata:
+        if retry:
+            time.sleep(1)
+            return get_user_configs(username, False)
     return metadata
 
 
 def refresh_access_token(refresh_token, username):
-    print("In refresh function")
+    logger.info(f"Refreshing access token for user {username}")
     try:
         data = {
             "refresh_token": refresh_token,
         }
         res = requests.put("https://tacc.tapis.io/v3/tokens", json=data)
-        print(res)
+        logger.debug(f"Token refresh response: {res}")
         resp_data = res.json()
-        print(resp_data)
+        logger.debug(f"Token refresh data: {resp_data}")
         new_access_token = resp_data["result"]["access_token"]["access_token"]
         refresh_token = resp_data["result"]["refresh_token"]["refresh_token"]
 
@@ -76,7 +94,7 @@ def refresh_access_token(refresh_token, username):
             "expires_at": expires_at,
         }
     except Exception as e:
-        print(f"Unable to refresh access token for {username}, error: {e}")
+        logger.error(f"Unable to refresh access token for {username}, error: {e}")
 
 
 def get_user_token_dir(username):
@@ -103,12 +121,10 @@ def save_token(
         ]
         with open(os.path.join(get_user_token_dir(username), ".tapipy"), "w") as f:
             json.dump(d, f)
-        print(
-            "Saved tapipy cache file to {}".format(
-                os.path.join(get_user_token_dir(username), ".tapipy")
-            )
-        )
-        print(f"tapipy cache file data: {d}")
+        # logger.info(
+        #     f"Saved tapipy cache file to {os.path.join(get_user_token_dir(username), '.tapipy')}"
+        # )
+        logger.debug(f"tapipy cache file data: {d}")
 
         # cli file
         d = {
@@ -126,11 +142,11 @@ def save_token(
         }
         with open(os.path.join(get_user_token_dir(username), "current"), "w") as f:
             json.dump(d, f)
-        print(
-            f"Saved CLI cache file to {os.path.join(get_user_token_dir(username), 'current')}"
-        )
+        # logger.info(
+        #     f"Saved CLI cache file to {os.path.join(get_user_token_dir(username), 'current')}"
+        # )
     except Exception as e:
-        print(f"Unable to save CLI cache file for {username}, error: {e}")
+        logger.error(f"Unable to save CLI cache file for {username}, error: {e}")
 
 
 def safe_string(to_escape, safe=None, escape_char="-"):

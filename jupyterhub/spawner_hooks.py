@@ -79,9 +79,9 @@ def hook(spawner):
     spawner.extra_container_config = spawner.configs.get("extra_container_config", {})
 
     for user_conf in spawner.user_configs:
-        if "extra_pod_config" in user_conf["value"]:
+        if "extra_pod_config" in user_conf:
             merge_configs(
-                user_conf["value"]["extra_pod_config"], spawner.extra_pod_config
+                user_conf["extra_pod_config"], spawner.extra_pod_config
             )
 
     if (
@@ -220,16 +220,19 @@ async def get_notebook_options(spawner):
     spawner.configs = get_tenant_configs()
     spawner.log.info(f"spawner configs: {spawner.configs}")
     spawner.user_configs = get_user_configs(spawner.user.name)
-    spawner.log.info(f"spawner user configs: {spawner.configs}")
+    spawner.log.info(f"spawner user configs: {spawner.user_configs}")
 
     image_options = spawner.configs.get("images")
 
     for item in spawner.user_configs:
-        for image in item["value"].get("images"):
-            if image not in image_options:
-                image_options += [image]
-            if eval(image.get("hpc_available", "False")):
-                spawner.hpc_available = True
+        if isinstance(item, dict) and "value" in item:
+            images = item["value"].get("images")
+            if isinstance(images, list):
+                for image in images:
+                    if image not in image_options:
+                        image_options += [image]
+                    if eval(image.get("hpc_available", "False")):
+                        spawner.hpc_available = True
 
     if not hasattr(
         spawner, "hpc_available"
@@ -289,7 +292,7 @@ async def get_notebook_options(spawner):
         select_images = '<select id="image" name="image" size="10" onchange="{}"> {} </select>'.format(
             js, options
         )
-        spawner.log.info(select_images)
+        # spawner.log.info(select_images)
         return "{}{}{}".format(select_images, image_description, hpc)
 
 
@@ -352,16 +355,16 @@ def get_tapis_access_data(spawner):
                 refresh_data["expires_at"],
             )
             spawner.access_token = refresh_data["access_token"]
-            spawner.log.info(f"Setting token: {spawner.access_token}")
+            # spawner.log.info(f"Setting token: {spawner.access_token}")
             spawner.refresh_token = refresh_data["refresh_token"]
-            spawner.log.info(f"Setting refresh token: {spawner.refresh_token}")
+            # spawner.log.info(f"Setting refresh token: {spawner.refresh_token}")
         else:
-            spawner.log.info(f"Setting token: {spawner.access_token}")
+            # spawner.log.info(f"Setting token: {spawner.access_token}")
             spawner.refresh_token = data[0]["refresh_token"]
-            spawner.log.info(f"Setting refresh token: {spawner.refresh_token}")
+            # spawner.log.info(f"Setting refresh token: {spawner.refresh_token}")
 
         spawner.url = data[0]["api_server"]
-        spawner.log.info(f"Setting url: {spawner.url}")
+        # spawner.log.info(f"Setting url: {spawner.url}")
 
     except (TypeError, KeyError):
         spawner.log.warning(
