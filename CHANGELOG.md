@@ -1,6 +1,12 @@
 # Changelog
 All notable changes to this project will be documented in this file
 
+## [3.1.6] (May 8, 2026)
+### 🚀 Added
+- Updated metadata calls to be more robust
+### 🚀 Modified
+- Update to allocation checks
+
 ## [3.1.3] (2025)
 ### 🚀 Added
 - Checks for training accounts

@@ -55,7 +55,7 @@ def get_tenant_configs(restricted=False, retry=True):
             time.sleep(1)
             return get_tenant_configs(restricted, False)
         return None
-    logger.info(f"Loaded tenant config: {metadata}")
+    logger.error(f"Loaded tenant config: {metadata}")
     return metadata[0]["value"]
 
 

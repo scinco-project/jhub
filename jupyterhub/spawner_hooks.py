@@ -194,6 +194,7 @@ def get_user_projects(spawner):
     response = pool_manager.request("GET", f"{TAS_URL_BASE}/projects/username/{user}")
     spawner.log.info(f"{TAS_URL_BASE}/projects/username/{user}")
     json_response = json.loads(response.data.decode("utf-8"))
+    spawner.log.info(f"TAS Projects for {user}: {json_response}")
     return json_response
 
 
@@ -224,15 +225,16 @@ async def get_notebook_options(spawner):
 
     image_options = spawner.configs.get("images")
 
-    for item in spawner.user_configs:
-        if isinstance(item, dict) and "value" in item:
-            images = item["value"].get("images")
-            if isinstance(images, list):
-                for image in images:
-                    if image not in image_options:
-                        image_options += [image]
-                    if eval(image.get("hpc_available", "False")):
-                        spawner.hpc_available = True
+    if spawner.user_configs:
+        for item in spawner.user_configs:
+            if isinstance(item, dict) and "value" in item:
+                images = item["value"].get("images")
+                if isinstance(images, list):
+                    for image in images:
+                        if image not in image_options:
+                            image_options += [image]
+                        if eval(image.get("hpc_available", "False")):
+                            spawner.hpc_available = True
 
     if not hasattr(
         spawner, "hpc_available"
