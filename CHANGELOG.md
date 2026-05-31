@@ -12,7 +12,7 @@ All notable changes to this project will be documented in this file
 - Checks for training accounts
 - Check for expired token, and refresh automatically
 - Assign restricted settings to users on restricted allocation
-- Block useres that have no allocation
+- Block users that have no allocation
 ### 🚀 Modified
 - Updated to JupyterHub v3
 ### 🚀 Deleted

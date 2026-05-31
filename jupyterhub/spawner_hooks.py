@@ -49,6 +49,7 @@ def hook(spawner):
     # Check if user only has restricted allocation
     restricted = is_user_restricted(spawner, tas_data)
     spawner.log.info(f"Restricted? {restricted}")
+
     # If user has allocation: keep as is
     # spawner.configs = get_tenant_configs()
     # If user only has specific "restricted" allocation:
@@ -59,14 +60,15 @@ def hook(spawner):
         spawner.user_configs = get_user_configs(spawner.user.name)
         spawner.log.info(f"spawner user configs: {spawner.configs}")
 
+    # Check if access token is valid
     get_tapis_access_data(spawner)
     spawner.log.info(
         "access token: {}, refresh token: {}, url: {}".format(
             spawner.access_token, spawner.refresh_token, spawner.url
         )
     )
-    # check if access token is valid
 
+    # If in training instance, default to 100 uid/gid
     if "training" not in tapis_base_url:
         get_tas_data(spawner)
         spawner.uid = spawner.tas_uid
@@ -75,6 +77,7 @@ def hook(spawner):
         spawner.uid = 100
         spawner.gid = 100
 
+    # Retrieve all of the configs and merge them together
     spawner.extra_pod_config = spawner.configs.get("extra_pod_config", {})
     spawner.extra_container_config = spawner.configs.get("extra_container_config", {})
 
@@ -183,28 +186,41 @@ def merge_configs(x, y):
 
 
 def get_user_projects(spawner):
-    user = spawner.user.name
-    http_headers = urllib3.make_headers(basic_auth=f"{TAS_ROLE_ACCT}:{TAS_ROLE_PASS}")
-    pool_manager = urllib3.PoolManager(
-        cert_reqs="CERT_REQUIRED",
-        ca_certs=certifi.where(),
-        retries=False,
-        headers=http_headers,
-    )
-    response = pool_manager.request("GET", f"{TAS_URL_BASE}/projects/username/{user}")
-    spawner.log.info(f"{TAS_URL_BASE}/projects/username/{user}")
-    json_response = json.loads(response.data.decode("utf-8"))
-    spawner.log.info(f"TAS Projects for {user}: {json_response}")
-    return json_response
+    """
+    Retrieve user projects from TAS
+    """
+    try:
+        user = spawner.user.name
+        http_headers = urllib3.make_headers(basic_auth=f"{TAS_ROLE_ACCT}:{TAS_ROLE_PASS}")
+        pool_manager = urllib3.PoolManager(
+            cert_reqs="CERT_REQUIRED",
+            ca_certs=certifi.where(),
+            retries=False,
+            headers=http_headers,
+        )
+        response = pool_manager.request("GET", f"{TAS_URL_BASE}/projects/username/{user}")
+        spawner.log.info(f"{TAS_URL_BASE}/projects/username/{user}")
+        json_response = json.loads(response.data.decode("utf-8"))
+        spawner.log.info(f"TAS Projects for {user}: {json_response}")
+        return json_response
+    except Exception:
+        return {}
 
 
 def is_user_allowed(spawner, tas_data):
+    """
+    A user is allowed if they have any allocation
+    """
     user = spawner.user.name
     spawner.log.info(f"Check if user has any allocation: {user}")
     return bool(tas_data.get("result"))
 
 
 def is_user_restricted(spawner, tas_data):
+    """
+    If the user is only in the restricted HETDEX project,
+    they are given the restricted user configs.
+    """
     user = spawner.user.name
     spawner.log.info(f"Check tas for restricted project for user: {user}")
     if len(tas_data["result"]) == 1:
@@ -218,7 +234,9 @@ def is_user_restricted(spawner, tas_data):
 
 
 async def get_notebook_options(spawner):
-    spawner.configs = get_tenant_configs()
+    tas_data = get_user_projects(spawner)
+    restricted = is_user_restricted(spawner, tas_data)
+    spawner.configs = get_tenant_configs(restricted=restricted)
     spawner.log.info(f"spawner configs: {spawner.configs}")
     spawner.user_configs = get_user_configs(spawner.user.name)
     spawner.log.info(f"spawner user configs: {spawner.user_configs}")
@@ -294,7 +312,6 @@ async def get_notebook_options(spawner):
         select_images = '<select id="image" name="image" size="10" onchange="{}"> {} </select>'.format(
             js, options
         )
-        # spawner.log.info(select_images)
         return "{}{}{}".format(select_images, image_description, hpc)
 
 
@@ -306,7 +323,6 @@ async def parse_form_data(formdata, spawner):
 def get_tapis_access_data(spawner):
     """
     Returns the access token and base URL cached in the tapipy file
-    :return:
     """
     # TODO figure out naming conventions that can follow k8 rules
     # k8 names must consist of lower case alphanumeric characters, '-' or '.',
@@ -579,7 +595,7 @@ def get_mounts(spawner):
                 vol["server"] = item["server"]
 
             if item["path"] == "/work2/{tas_homedir}":
-                spawner.log.info(spawner.init_gid)
+                # TODO: remove this check
                 if spawner.init_gid == 0:
                     continue
 
