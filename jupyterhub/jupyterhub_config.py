@@ -1,9 +1,9 @@
 # Configuration file for jupyterhub.
-from jupyterhub.spawner_hooks import hook, get_notebook_options, parse_form_data
-from oauthenticator.tapis import TapisOAuthenticator
 import os
 
 from jupyterhub.common import get_tenant_configs
+from jupyterhub.spawner_hooks import get_notebook_options, hook, parse_form_data
+from oauthenticator.tapis import TapisOAuthenticator
 
 CONFIGS = get_tenant_configs()
 print(CONFIGS)
@@ -85,7 +85,7 @@ c.JupyterHub.admin_access = True
 #  - takes two arguments: (handler, data),
 #    where `handler` is the calling web.RequestHandler,
 #    and `data` is the POST form data from the login page.
-#c.JupyterHub.tornado_settings = {"cookie_options": {"samesite": "None", "Secure": True}}
+# c.JupyterHub.tornado_settings = {"cookie_options": {"samesite": "None", "Secure": True}}
 # c.JupyterHub.tornado_settings = {
 #     'headers': {
 #         'Content-Security-Policy': 'frame-ancestors *',
@@ -108,6 +108,7 @@ c.TapisOAuthenticator.authorize_url = "{}/oauth2/authorize".format(
     CONFIGS.get("tapis_base_url").rstrip("/")
 )
 c.Authenticator.admin_users = CONFIGS.get("admin_users", [])
+c.Authenticator.allow_all = True
 
 # The base URL of the entire application.
 #
@@ -511,7 +512,7 @@ c.JupyterHub.template_paths = ["/usr/local/share/jupyterhub/templates/custom_tem
 #  documentation for your spawner to verify!
 # c.Spawner.cmd = ['jupyterhub-singleuser']
 c.Spawner.cmd = ["jupyterhub-singleuser"]
-c.Spawner.args = ["--collaborative"]
+# c.Spawner.args = ["--collaborative"]
 
 # Maximum number of consecutive failures to allow before shutting down
 #  JupyterHub.
