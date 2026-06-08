@@ -10,6 +10,14 @@ from tapipy.tapis import Tapis
 
 logger = logging.getLogger("JupyterHub")
 
+# Detect which target we are deploying to
+# Requires us to set this in our deployment yaml
+DEPLOYMENT_TARGET = os.environ.get("DEPLOYMENT_TARGET", "").lower()
+
+IS_TACC = DEPLOYMENT_TARGET == "tacc"
+IS_DESIGNSAFE = DEPLOYMENT_TARGET == "designsafe"
+
+
 INSTANCE = os.environ.get("INSTANCE")
 TENANT = os.environ.get("TENANT")
 RESTRICTED_ID = os.environ.get("RESTRICTED_ID", "66657")
@@ -17,15 +25,29 @@ RESTRICTED_LABEL = os.environ.get("RESTRICTED_LABEL", "hetdex")
 tapis_service_token = os.environ.get("TAPIS_SERVICE_TOKEN")
 portals_service_token = os.environ.get("PORTALS_SERVICE_TOKEN")
 portals_base_url = os.environ.get("PORTALS_BASE_URL", "https://portals.tapis.io")
-tapis_base_url = os.environ.get("TAPIS_BASE_URL", "https://tacc.tapis.io")
+tapis_base_url = os.environ.get("TAPIS_BASE_URL", "https://tacc.tapis.io").rstrip()
 meta_base_url = os.environ.get("META_BASE_URL", "https://tacc.tapis.io")
 database = os.environ.get("TAPIS_DATABASE")
 collection = os.environ.get("TAPIS_COLLECTION")
 
-
 if not tapis_service_token:
     raise Exception("Missing TAPIS_SERVICE_TOKEN configuration.")
 
+# Tenant specific environment cariables
+projects_url = os.environ.get("PROJECTS_URL", "https://designsafe-ci.org")
+
+if IS_TACC:
+    RESTRICTED_ID = os.environ.get("RESTRICTED_ID", "66657")
+    RESTRICTED_LABEL = os.environ.get("RESTRICTED_LABEL", "hetdex")
+    portals_service_token = os.environ.get("PORTALS_SERVICE_TOKEN")
+    portals_base_url = os.environ.get("PORTALS_BASE_URL", "https://portals.tapis.io")
+
+if IS_DESIGNSAFE:
+    tapis_base_url = tapis_base_url or "https://designsafe.tapis.io"
+
+
+# Calls to the meta service to get configs related to the JupyterHub instance
+# We also look for user specific configs (ie: if the user is in a group)
 
 def get_metadata(t, q):
     try:
@@ -71,13 +93,16 @@ def get_user_configs(username, retry=True):
     return metadata
 
 
+# Functions that manage the users access token
+
 def refresh_access_token(refresh_token, username):
     logger.info(f"Refreshing access token for user {username}")
+
     try:
         data = {
             "refresh_token": refresh_token,
         }
-        res = requests.put("https://tacc.tapis.io/v3/tokens", json=data)
+        res = requests.put(f"{tapis_base_url}/v3/tokens", json=data)
         logger.debug(f"Token refresh response: {res}")
         resp_data = res.json()
         logger.debug(f"Token refresh data: {resp_data}")
@@ -107,6 +132,7 @@ def save_token(
     try:
         configs = get_tenant_configs()
         tenant_id = configs.get("tapis_tenant_id")
+
         # tapipy file
         d = [
             {
@@ -121,13 +147,9 @@ def save_token(
         ]
         with open(os.path.join(get_user_token_dir(username), ".tapipy"), "w") as f:
             json.dump(d, f)
-        # logger.info(
-        #     f"Saved tapipy cache file to {os.path.join(get_user_token_dir(username), '.tapipy')}"
-        # )
-        logger.debug(f"tapipy cache file data: {d}")
 
-        # cli file
-        d = {
+        # CLI file
+        cli_data = {
             "tenantid": tenant_id,
             "baseurl": "{}".format(configs.get("tapis_base_url").rstrip("/")),
             "devurl": "",
@@ -141,13 +163,12 @@ def save_token(
             "expires_at": str(expires_at),
         }
         with open(os.path.join(get_user_token_dir(username), "current"), "w") as f:
-            json.dump(d, f)
-        # logger.info(
-        #     f"Saved CLI cache file to {os.path.join(get_user_token_dir(username), 'current')}"
-        # )
+            json.dump(cli_data, f)
     except Exception as e:
         logger.error(f"Unable to save CLI cache file for {username}, error: {e}")
 
+
+# String utilities
 
 def safe_string(to_escape, safe=None, escape_char="-"):
     """Escape a string so that it only contains characters in a safe set.

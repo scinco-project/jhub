@@ -9,8 +9,11 @@ import humanfriendly
 import jwt
 import requests
 import urllib3
-from jupyterhub.common import (
+
+from .common import (
     INSTANCE,
+    IS_DESIGNSAFE,
+    IS_TACC,
     RESTRICTED_ID,
     RESTRICTED_LABEL,
     TENANT,
@@ -20,7 +23,10 @@ from jupyterhub.common import (
     safe_string,
     save_token,
     tapis_base_url,
+    projects_url,
+    tapis_service_token
 )
+
 from ldap3 import SAFE_SYNC, Connection, Server
 from tornado import web
 
@@ -29,17 +35,21 @@ from tornado import web
 TAS_URL_BASE = os.environ.get("TAS_URL_BASE", "https://tas.tacc.utexas.edu/api/v1")
 TAS_ROLE_ACCT = os.environ.get("TAS_ROLE_ACCT", "tas-jetstream")
 TAS_ROLE_PASS = os.environ.get("TAS_ROLE_PASS")
+
 LDAP_PASS = os.environ.get("LDAP_PASS")
 
 
+# Main configuration hook for the KubeSpawner
+
 def hook(spawner):
+    """Sets up the user's notebook server."""
     spawner.start_timeout = 60 * 5
     spawner.log.info("👻 tenant configs 👻 {}".format(spawner.configs))
     spawner.log.info("👽 user configs 👽 {}".format(spawner.user_configs))
     spawner.log.info("😱 user options (from form) 😱 {}".format(spawner.user_options))
 
-    # Add call to TAS to get allocation data for user
-    tas_data = get_user_projects(spawner)
+    # Add call to TAS to get projects data for user
+    tas_data = get_tas_user_projects(spawner)
 
     # Check response from TAS to check for any allocation
     allowed = is_user_allowed(spawner, tas_data)
@@ -47,18 +57,18 @@ def hook(spawner):
         raise web.HTTPError(403)
 
     # Check if user only has restricted allocation
-    restricted = is_user_restricted(spawner, tas_data)
-    spawner.log.info(f"Restricted? {restricted}")
+    if IS_TACC:
+        restricted = is_user_restricted(spawner, tas_data)
+        spawner.log.info(f"Restricted? {restricted}")
 
-    # If user has allocation: keep as is
-    # spawner.configs = get_tenant_configs()
-    # If user only has specific "restricted" allocation:
-    # set spawner.configs to restricted metadata group
-    if restricted:
-        spawner.configs = get_tenant_configs(restricted)
-        spawner.log.info(f"spawner configs: {spawner.configs}")
-        spawner.user_configs = get_user_configs(spawner.user.name)
-        spawner.log.info(f"spawner user configs: {spawner.configs}")
+        # If user has allocation: keep as is
+        # If user only has specific "restricted" allocation:
+        # set spawner.configs to restricted metadata group
+        if restricted:
+            spawner.configs = get_tenant_configs(restricted)
+            spawner.log.info(f"spawner configs: {spawner.configs}")
+            spawner.user_configs = get_user_configs(spawner.user.name)
+            spawner.log.info(f"spawner user configs: {spawner.configs}")
 
     # Check if access token is valid
     get_tapis_access_data(spawner)
@@ -69,29 +79,45 @@ def hook(spawner):
     )
 
     # If in training instance, default to 100 uid/gid
-    if "training" not in tapis_base_url:
-        get_tas_data(spawner)
-        spawner.uid = spawner.tas_uid
-        spawner.gid = spawner.tas_gid
-    else:
+    if IS_TACC and "training" in tapis_base_url:
         spawner.uid = 100
         spawner.gid = 100
+    else:
+        get_tas_data(spawner)
+        if not spawner.tas_uid or not spawner.tas_gid:
+            raise web.HTTPError(403)
+        spawner.uid = int(spawner.tas_uid)
+        spawner.gid = int(spawner.tas_gid)
 
     # Retrieve all of the configs and merge them together
     spawner.extra_pod_config = spawner.configs.get("extra_pod_config", {})
     spawner.extra_container_config = spawner.configs.get("extra_container_config", {})
+    spawner.extra_resource_guarantees = spawner.configs.get("extra_resource_guarantees", {})
+    spawner.extra_resource_limits = spawner.configs.get("extra_resource_limits", {})
 
     for user_conf in spawner.user_configs:
-        if "extra_pod_config" in user_conf:
-            merge_configs(
-                user_conf["extra_pod_config"], spawner.extra_pod_config
+        conf_value = user_conf.get("value", user_conf)
+        if "extra_pod_config" in conf_value:
+            spawner.extra_pod_config = merge_configs(
+                conf_value["extra_pod_config"], spawner.extra_pod_config
+            )
+        if "extra_resource_guarantees" in conf_value:
+            spawner.extra_resource_guarantees = merge_configs(
+                conf_value["extra_resource_guarantees"], spawner.extra_resource_guarantees
+            )
+        if "extra_resource_limits" in conf_value:
+            spawner.extra_resource_limits = merge_configs(
+                conf_value["extra_resource_limits"], spawner.extra_resource_limits
             )
 
+
+    # only 1 image option, so we can skip the form
     if (
-        len(spawner.configs.get("images")) == 1 and not spawner.hpc_available
-    ):  # only 1 image option, so we skipped the form
+        len(spawner.configs.get("images")) == 1
+    ):
         spawner.image = spawner.configs.get("images")[0]["name"]
     else:
+        # TODO: 
         # verify form data
         image_options = spawner.configs.get("images")
         spawner.log.info(f"Verifiying image: {image_options}")
@@ -106,6 +132,10 @@ def hook(spawner):
         spawner.log.info(f"User options: {user_options}")
         image = ast.literal_eval(spawner.user_options["image"][0])
         spawner.log.info(f"Image: {image}")
+
+
+        # NOTE: Can probably remove this try/except, we do not support HPC spawning
+
         try:
             spawner.log.info(
                 "Checking user options: image-{} hpc-{} against metadata: {}".format(
@@ -143,8 +173,12 @@ def hook(spawner):
             merge_configs(image["extra_container_config"], spawner.extra_pod_config)
         spawner.notebook_dir = image.get("notebook_dir", "")
 
+
+    # TODO: Remove the if statement
+    # NOTE: This if check will always be true since there is no way to select HPC
+    # Find highest available limit between tenant/user/group configs and set env variables
+
     if not spawner.user_options.get("hpc"):
-        # find highest available limit between tenant/user/group configs
         tenant_mem_limit = spawner.configs.get("mem_limit")
         mem_limits = {tenant_mem_limit: humanfriendly.parse_size(tenant_mem_limit)}
         cpu_limits = [spawner.configs.get("cpu_limit")]
@@ -164,28 +198,64 @@ def hook(spawner):
         # it sets a resource request for an amount equal to the limit
         spawner.mem_guarantee = ".001K"
         spawner.cpu_guarantee = float(0.001)
-        spawner.environment = {
+
+        user = spawner.user.name
+        uid = str(spawner.uid)
+        gid = str(spawner.gid)
+
+        env = {
             "MKL_NUM_THREADS": max(cpu_limits),
             "NUMEXPR_NUM_THREADS": max(cpu_limits),
             "OMP_NUM_THREADS": max(cpu_limits),
             "OPENBLAS_NUM_THREADS": max(cpu_limits),
             "SCINCO_JUPYTERHUB_IMAGE": spawner.image,
+            "HUB_USER": user,
+            "HUB_UID": uid,
+            "HUB_GID": gid,
         }
+
+        if IS_DESIGNSAFE:
+            env.update({
+                "MLM_LICENSE_FILE": spawner.configs.get("mlm_license_file", "")
+            })
+    
+        spawner.environment = env
+
     get_mounts(spawner)
 
+    if IS_DESIGNSAFE:
+        get_licenses(spawner)
+        get_ds_projects(spawner)
+
+
+# def merge_configs(x, y):
+#     merged_pod_config = {**x, **y}
+#     for key, value in merged_pod_config.items():
+#         if key in x and key in y:
+#             if type(x[key]) is list:
+#                 for z in x[key]:
+#                     merged_pod_config[key].append(z)
+#             else:
+#                 merged_pod_config[key].update(x[key])
 
 def merge_configs(x, y):
-    merged_pod_config = {**x, **y}
-    for key, value in merged_pod_config.items():
-        if key in x and key in y:
-            if type(x[key]) is list:
-                for z in x[key]:
-                    merged_pod_config[key].append(z)
+    """Deep-merge dict x into dict y, combining lists and dicts recursively."""
+    merged = {**y}
+    for key, value in x.items():
+        if key in merged:
+            if isinstance(merged[key], list) and isinstance(value, list):
+                merged[key] = merged[key] + value
+            elif isinstance(merged[key], dict) and isinstance(value, dict):
+                merged[key] = {**merged[key], **value}
             else:
-                merged_pod_config[key].update(x[key])
+                merged[key] = value
+        else:
+            merged[key] = value
+    return merged
 
 
-def get_user_projects(spawner):
+
+def get_tas_user_projects(spawner):
     """
     Retrieve user projects from TAS
     """
@@ -223,20 +293,25 @@ def is_user_restricted(spawner, tas_data):
     """
     user = spawner.user.name
     spawner.log.info(f"Check tas for restricted project for user: {user}")
-    if len(tas_data["result"]) == 1:
-        item_id = tas_data["result"][0].get("id")
+    results = tas_data.get("result", [])
+    if len(results) == 1:
+        item_id = results[0].get("id")
         if item_id is not None and str(item_id) == RESTRICTED_ID:
             spawner.log.info(f"Found restricted project for user: {user}")
             spawner.extra_labels = {"restrictedProject": RESTRICTED_LABEL}
             return True
-
     return False
 
 
 async def get_notebook_options(spawner):
-    tas_data = get_user_projects(spawner)
-    restricted = is_user_restricted(spawner, tas_data)
-    spawner.configs = get_tenant_configs(restricted=restricted)
+    """Determine which images should be shown to the user to select."""
+    if IS_TACC:
+        tas_data = get_tas_user_projects(spawner)
+        restricted = is_user_restricted(spawner, tas_data)
+        spawner.configs = get_tenant_configs(restricted=restricted)
+    else:
+        spawner.configs = get_tenant_configs()
+
     spawner.log.info(f"spawner configs: {spawner.configs}")
     spawner.user_configs = get_user_configs(spawner.user.name)
     spawner.log.info(f"spawner user configs: {spawner.user_configs}")
@@ -254,9 +329,11 @@ async def get_notebook_options(spawner):
                         if eval(image.get("hpc_available", "False")):
                             spawner.hpc_available = True
 
-    if not hasattr(
-        spawner, "hpc_available"
-    ):  # only looped through user options -- check the tenant options for hpc
+
+    # TODO: Look at everything that references hpc_available
+
+    # only looped through user options -- check the tenant options for hpc
+    if not hasattr(spawner, "hpc_available"):
         for image in spawner.configs.get("images"):
             if eval(image.get("hpc_available", "False")):
                 spawner.hpc_available = True
@@ -264,6 +341,7 @@ async def get_notebook_options(spawner):
             spawner.hpc_available = False
 
     image_options = sorted(image_options, key=lambda d: d["name"])
+
     if len(image_options) > 1 or spawner.hpc_available:
         options = ""
         for image in image_options:
@@ -497,6 +575,8 @@ def get_mounts(spawner):
     tapipy_safe_name = f"{safe_username}-{safe_tenant}-{safe_instance}-jhub-tapipy"
     current_safe_name = f"{safe_username}-{safe_tenant}-{safe_instance}-jhub-current"
 
+    jupyter_home = "/home/jupyter" if IS_DESIGNSAFE else "/home/jovyan"
+
     spawner.init_containers = [
         {
             "name": "rw-configmap-workaround",
@@ -556,13 +636,13 @@ def get_mounts(spawner):
             "subPath": ".tapipy/.tapipy",
         },
         {
-            "mountPath": "/home/jovyan/.tapis-token",
+            "mountPath": f"{jupyter_home}/.tapis-token",
             "name": current_safe_name,
             "subPath": "current",
         },
     ]
-    volume_mounts = spawner.configs.get("volume_mounts")
 
+    volume_mounts = spawner.configs.get("volume_mounts")
     for item in spawner.user_configs:
         if item["value"].get("volume_mounts"):
             volume_mounts += [
@@ -571,7 +651,7 @@ def get_mounts(spawner):
 
     template_vars = {
         "username": spawner.user.name,
-        "tenant_id": TENANT,  # TODO do we need this?
+        "tenant_id": TENANT,  # TODO: do we need this?
     }
 
     if hasattr(spawner, "tas_homedir"):
@@ -594,10 +674,10 @@ def get_mounts(spawner):
             if item["type"] == "nfs":
                 vol["server"] = item["server"]
 
-            if item["path"] == "/work2/{tas_homedir}":
-                # TODO: remove this check
-                if spawner.init_gid == 0:
-                    continue
+            # if item["path"] == "/work2/{tas_homedir}":
+            #     # TODO: remove this check
+            #     if spawner.init_gid == 0:
+            #         continue
 
             spawner.volumes.append({"name": vol_name, item["type"]: vol})
 
@@ -606,3 +686,92 @@ def get_mounts(spawner):
             )
         spawner.log.info("volumes: {}".format(spawner.volumes))
         spawner.log.info("volume_mounts: {}".format(spawner.volume_mounts))
+
+
+# DesignSafe-only: project NFS mounts
+
+def get_ds_projects(spawner):
+    """Mount DesignSafe projects from Corral."""
+    if not IS_DESIGNSAFE:
+        return
+
+    spawner.host_projects_root_dir = spawner.configs.get("host_projects_root_dir")
+    spawner.container_projects_root_dir = spawner.configs.get("container_projects_root_dir")
+    spawner.network_storage = spawner.configs.get("network_storage")
+
+    if not spawner.host_projects_root_dir or not spawner.container_projects_root_dir:
+        spawner.log.info(f"No host/container projects root dir configured: {spawner.configs}")
+        return
+    if not spawner.access_token or not spawner.url:
+        spawner.log.info("No access_token or url — skipping get_projects")
+        return
+
+    try:
+        headers = {"x-tapis-token": spawner.access_token}
+        rsp = requests.get(f"{projects_url}/api/projects/v2", headers=headers)
+        data = rsp.json()
+        projects = data.get("result")
+        spawner.log.info(f"service returned projects: {projects}")
+    except Exception as e:
+        spawner.log.warning(f"Exception calling /projects for {spawner.user.name}: {e}")
+        return
+
+    try:
+        spawner.log.info(f"Found {len(projects)} projects")
+    except TypeError:
+        spawner.log.error(f"Projects data has no length. response: {rsp}, data: {data}")
+        return
+
+    for project in projects:
+        uuid = project.get("uuid")
+        if not uuid:
+            spawner.log.warning(f"No uuid for project: {project}")
+            continue
+        project_id = project.get("value", {}).get("projectId")
+        if not project_id:
+            spawner.log.warning(f"No projectId for project: {project}")
+            continue
+
+        server = spawner.network_storage
+        mount_path = f"{spawner.container_projects_root_dir}/{project_id}"
+        path = f"{spawner.host_projects_root_dir}/{uuid}"
+
+        if uuid == "7997906542076432871-242ac11c-0001-012":
+            path = "/corral/main/projects/NHERI/community"
+            server = "129.114.52.166"
+
+        spawner.volumes.append({
+            "name": f"project-{safe_string(uuid).lower()}",
+            "nfs": {"server": server, "path": path, "readOnly": False},
+        })
+        spawner.volume_mounts.append({
+            "mountPath": mount_path,
+            "name": f"project-{safe_string(uuid).lower()}",
+        })
+
+    spawner.log.info(spawner.volumes)
+    spawner.log.info(spawner.volume_mounts)
+
+
+# DesignSafe-only: license injection
+
+def get_licenses(spawner):
+    """Fetch MATLAB and LSDYNA licenses."""
+    if not IS_DESIGNSAFE:
+        return
+    if not spawner.access_token:
+        spawner.log.info("No access_token — skipping get_licenses")
+        return
+
+    headers = {"x-tapis-token": tapis_service_token}
+
+    for license_type, env_key in [("MATLAB", "MATLAB_LICENSE"), ("LSDYNA", "LSDYNA_LICENSE")]:
+        url = f"{projects_url}/api/licenses/{license_type}/?username={spawner.user.name}"
+        spawner.log.info(f"Fetching {license_type} license from {url}")
+        try:
+            rsp = requests.get(url, headers=headers)
+            data = rsp.json()
+            spawner.log.info(f"{license_type} license data: {data}")
+            spawner.environment[env_key] = data["license"]
+        except Exception as e:
+            spawner.log.warning(f"Exception fetching {license_type} license for {spawner.user.name}: {e}")
