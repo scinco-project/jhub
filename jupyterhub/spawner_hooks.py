@@ -43,22 +43,21 @@ LDAP_PASS = os.environ.get("LDAP_PASS")
 
 def hook(spawner):
     """Sets up the user's notebook server."""
+    spawner.log.info("In main hook function")
     spawner.start_timeout = 60 * 5
     spawner.log.info("👻 tenant configs 👻 {}".format(spawner.configs))
     spawner.log.info("👽 user configs 👽 {}".format(spawner.user_configs))
     spawner.log.info("😱 user options (from form) 😱 {}".format(spawner.user_options))
 
-    # Add call to TAS to get projects data for user
-    tas_data = get_tas_user_projects(spawner)
-
     # Check response from TAS to check for any allocation
-    allowed = is_user_allowed(spawner, tas_data)
+    # Should already have been caught, but double checking doesn't hurt
+    allowed = is_user_allowed(spawner)
     if not allowed:
         raise web.HTTPError(403)
 
     # Check if user only has restricted allocation
     if IS_TACC:
-        restricted = is_user_restricted(spawner, tas_data)
+        restricted = is_user_restricted(spawner)
         spawner.log.info(f"Restricted? {restricted}")
 
         # If user has allocation: keep as is
@@ -277,23 +276,23 @@ def get_tas_user_projects(spawner):
         return {}
 
 
-def is_user_allowed(spawner, tas_data):
+def is_user_allowed(spawner):
     """
     A user is allowed if they have any allocation
     """
     user = spawner.user.name
     spawner.log.info(f"Check if user has any allocation: {user}")
-    return bool(tas_data.get("result"))
+    return bool(spawner.tas_data.get("result"))
 
 
-def is_user_restricted(spawner, tas_data):
+def is_user_restricted(spawner):
     """
     If the user is only in the restricted HETDEX project,
     they are given the restricted user configs.
     """
     user = spawner.user.name
     spawner.log.info(f"Check tas for restricted project for user: {user}")
-    results = tas_data.get("result", [])
+    results = spawner.tas_data.get("result", [])
     if len(results) == 1:
         item_id = results[0].get("id")
         if item_id is not None and str(item_id) == RESTRICTED_ID:
@@ -305,9 +304,15 @@ def is_user_restricted(spawner, tas_data):
 
 async def get_notebook_options(spawner):
     """Determine which images should be shown to the user to select."""
+    spawner.tas_data = get_tas_user_projects(spawner)
+    allowed = is_user_allowed(spawner)
+
+    if not allowed:
+        spawner.log.error(f"UNAUTHORIZED USER: {spawner.user.name} ATTEMPTING TO ACCESS JUPYTERHUB")
+        raise web.HTTPError(403)
+
     if IS_TACC:
-        tas_data = get_tas_user_projects(spawner)
-        restricted = is_user_restricted(spawner, tas_data)
+        restricted = is_user_restricted(spawner)
         spawner.configs = get_tenant_configs(restricted=restricted)
     else:
         spawner.configs = get_tenant_configs()
