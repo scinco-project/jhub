@@ -25,12 +25,8 @@ CONFIGS = get_tenant_configs()
 
 
 class TapisMixin(OAuth2Mixin):
-    _OAUTH_AUTHORIZE_URL = "{}/oauth2/authorize".format(
-        CONFIGS.get("tapis_base_url").rstrip("/")
-    )
-    _OAUTH_ACCESS_TOKEN_URL = "{}/oauth2/tokens".format(
-        CONFIGS.get("tapis_base_url").rstrip("/")
-    )
+    _OAUTH_AUTHORIZE_URL = f"{CONFIGS.get('tapis_base_url').rstrip('/')}/oauth2/authorize"
+    _OAUTH_ACCESS_TOKEN_URL = f"{CONFIGS.get('tapis_base_url').rstrip('/')}/oauth2/tokens"
 
 
 class TapisLoginHandler(OAuthLoginHandler, TapisMixin):
@@ -62,7 +58,7 @@ class TapisOAuthenticator(OAuthenticator):
         }
 
         url = url_concat(
-            "{}/oauth2/tokens".format(CONFIGS.get("tapis_base_url").rstrip("/")), params
+            f"{CONFIGS.get('tapis_base_url').rstrip('/')}/oauth2/tokens", params
         )
 
         credentials = (
@@ -74,9 +70,8 @@ class TapisOAuthenticator(OAuthenticator):
         cred_encoded = base64.b64encode(cred_bytes)
         cred_encoded_string = cred_encoded.decode("ascii")
 
-        # Create Header object
         headers = {
-            "Authorization": "Basic %s" % cred_encoded_string,
+            "Authorization": f"Basic {cred_encoded_string}",
             "Content-Type": "application/json",
         }
 
@@ -109,8 +104,7 @@ class TapisOAuthenticator(OAuthenticator):
             os.makedirs(get_user_token_dir(username))
         except OSError as e:
             self.log.info(
-                "Got error trying to make token dir: "
-                "{} exception: {}".format(get_user_token_dir(username), e)
+                f"Got error trying to make token dir: {get_user_token_dir(username)} exception: {e}"
             )
 
     def save_token(
@@ -125,24 +119,18 @@ class TapisOAuthenticator(OAuthenticator):
                 "tenant_id": tenant_id,
                 "api_key": CONFIGS.get("tapis_client_id"),
                 "api_secret": CONFIGS.get("tapis_client_secret"),
-                "api_server": "{}".format(CONFIGS.get("tapis_base_url").rstrip("/")),
+                "api_server": CONFIGS.get("tapis_base_url").rstrip("/"),
                 "verify": eval(CONFIGS.get("oauth_validate_cert")),
             }
         ]
         with open(os.path.join(get_user_token_dir(username), ".tapipy"), "w") as f:
             json.dump(d, f)
-        # self.log.info(
-        #     "Saved tapipy cache file to {}".format(
-        #         os.path.join(get_user_token_dir(username), ".tapipy")
-        #     )
-        # )
-        # self.log.info(f"tapipy cache file data: {d}")
         self.create_configmap(username, ".tapipy", json.dumps(d))
 
         # cli file
         d = {
             "tenantid": tenant_id,
-            "baseurl": "{}".format(CONFIGS.get("tapis_base_url").rstrip("/")),
+            "baseurl": CONFIGS.get("tapis_base_url").rstrip("/"),
             "devurl": "",
             "apikey": CONFIGS.get("tapis_client_id"),
             "username": username,
@@ -155,12 +143,6 @@ class TapisOAuthenticator(OAuthenticator):
         }
         with open(os.path.join(get_user_token_dir(username), "current"), "w") as f:
             json.dump(d, f)
-        # self.log.info(
-        #     "Saved CLI cache file to {}".format(
-        #         os.path.join(get_user_token_dir(username), "current")
-        #     )
-        # )
-        # self.log.info("CLI cache file data: {}".format(d))
         self.create_configmap(username, "current", json.dumps(d))
 
     def create_configmap(self, username, name, d):
@@ -170,7 +152,7 @@ class TapisOAuthenticator(OAuthenticator):
             namespace = f.read()
 
         configuration = client.Configuration()
-        configuration.api_key["authorization"] = "Bearer {}".format(token)
+        configuration.api_key["authorization"] = f"Bearer {token}"
         configuration.host = "https://kubernetes.default"
         configuration.ssl_ca_cert = "/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 
@@ -179,13 +161,9 @@ class TapisOAuthenticator(OAuthenticator):
         safe_username = safe_string(username).lower()
         safe_tenant = safe_string(TENANT).lower()
         safe_instance = safe_string(INSTANCE).lower()
-        configmap_name_prefix = "{}-{}-{}-jhub".format(
-            safe_username, safe_tenant, safe_instance
-        )
+        configmap_name_prefix = f"{safe_username}-{safe_tenant}-{safe_instance}-jhub"
         # remove the . from .agpy to accomodate k8 naming rules
-        configmap_name = "{}-{}".format(
-            configmap_name_prefix, re.sub("[^A-Za-z0-9]+", "", name)
-        )
+        configmap_name = f"{configmap_name_prefix}-{re.sub('[^A-Za-z0-9]+', '', name)}"
 
         body = client.V1ConfigMap(
             data={name: str(d)},
@@ -200,29 +178,19 @@ class TapisOAuthenticator(OAuthenticator):
             },
         )
 
-        # self.log.info("{}:{}".format("configmap body", body))
-
         try:  # delete any current configmaps to ensure no stale tokens
             api_response = api_instance.delete_namespaced_config_map(
                 configmap_name, namespace
             )
-            # self.log.info("{} configmap deleted".format(configmap_name))
             print(str(api_response))
         except Exception as e:
-            print(
-                "Exception when calling CoreV1Api->delete_namespaced_config_map: %s\n"
-                % e
-            )
+            print(f"Exception when calling CoreV1Api->delete_namespaced_config_map: {e}\n")
 
         try:
             api_response = api_instance.create_namespaced_config_map(namespace, body)
-            # self.log.info("{} configmap created".format(name))
-            print(str(api_response))
+            self.log.info(str(api_response))
         except Exception as e:
-            print(
-                "Exception when calling CoreV1Api->create_namespaced_config_map: %s\n"
-                % e
-            )
+            self.log.info(f"Exception when calling CoreV1Api->create_namespaced_config_map: {e}\n")
 
 
 class LocalTapisOAuthenticator(LocalAuthenticator, TapisOAuthenticator):

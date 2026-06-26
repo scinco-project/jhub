@@ -141,7 +141,7 @@ def save_token(
                 "tenant_id": tenant_id,
                 "api_key": configs.get("tapis_client_id"),
                 "api_secret": configs.get("tapis_client_secret"),
-                "api_server": "{}".format(configs.get("tapis_base_url").rstrip("/")),
+                "api_server": configs.get("tapis_base_url").rstrip("/"),
                 "verify": eval(configs.get("oauth_validate_cert")),
             }
         ]
@@ -151,7 +151,7 @@ def save_token(
         # CLI file
         cli_data = {
             "tenantid": tenant_id,
-            "baseurl": "{}".format(configs.get("tapis_base_url").rstrip("/")),
+            "baseurl": configs.get("tapis_base_url").rstrip("/"),
             "devurl": "",
             "apikey": configs.get("tapis_client_id"),
             "username": username,
