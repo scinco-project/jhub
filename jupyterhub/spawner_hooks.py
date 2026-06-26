@@ -45,9 +45,9 @@ def hook(spawner):
     """Sets up the user's notebook server."""
     spawner.log.info("In main hook function")
     spawner.start_timeout = 60 * 5
-    spawner.log.info("👻 tenant configs 👻 {}".format(spawner.configs))
-    spawner.log.info("👽 user configs 👽 {}".format(spawner.user_configs))
-    spawner.log.info("😱 user options (from form) 😱 {}".format(spawner.user_options))
+    spawner.log.info(f"👻 tenant configs 👻 {spawner.configs}")
+    spawner.log.info(f"👽 user configs 👽 {spawner.user_configs}")
+    spawner.log.info(f"😱 user options (from form) 😱 {spawner.user_options}")
 
     # Check response from TAS to check for any allocation
     # Should already have been caught, but double checking doesn't hurt
@@ -67,14 +67,12 @@ def hook(spawner):
             spawner.configs = get_tenant_configs(restricted)
             spawner.log.info(f"spawner configs: {spawner.configs}")
             spawner.user_configs = get_user_configs(spawner.user.name)
-            spawner.log.info(f"spawner user configs: {spawner.configs}")
+            spawner.log.info(f"spawner user configs: {spawner.user_configs}")
 
     # Check if access token is valid
     get_tapis_access_data(spawner)
     spawner.log.info(
-        "access token: {}, refresh token: {}, url: {}".format(
-            spawner.access_token, spawner.refresh_token, spawner.url
-        )
+        f"access token: {spawner.access_token}, refresh token: {spawner.refresh_token}, url: {spawner.url}"
     )
 
     # If in training instance, default to 100 uid/gid
@@ -109,15 +107,10 @@ def hook(spawner):
                 conf_value["extra_resource_limits"], spawner.extra_resource_limits
             )
 
-
     # only 1 image option, so we can skip the form
-    if (
-        len(spawner.configs.get("images")) == 1
-    ):
+    if len(spawner.configs.get("images")) == 1:
         spawner.image = spawner.configs.get("images")[0]["name"]
     else:
-        # TODO: 
-        # verify form data
         image_options = spawner.configs.get("images")
         spawner.log.info(f"Verifiying image: {image_options}")
         user_configs = spawner.user_configs
@@ -132,14 +125,9 @@ def hook(spawner):
         image = ast.literal_eval(spawner.user_options["image"][0])
         spawner.log.info(f"Image: {image}")
 
-
-        # NOTE: Can probably remove this try/except, we do not support HPC spawning
-
         try:
             spawner.log.info(
-                "Checking user options: image-{} hpc-{} against metadata: {}".format(
-                    image, spawner.user_options.get("hpc"), image_options
-                )
+                f"Checking user options: image-{image} hpc-{spawner.user_options.get('hpc')} against metadata: {image_options}"
             )
             allowed_options = next(
                 option
@@ -150,16 +138,12 @@ def hook(spawner):
             if spawner.user_options.get("hpc"):
                 if not eval(allowed_options.get("hpc_available", "False")):
                     spawner.log.error(
-                        "hpc is not available for this image. {} -- {}".format(
-                            spawner.user.name, allowed_options
-                        )
+                        f"hpc is not available for this image. {spawner.user.name} -- {allowed_options}"
                     )
                     raise web.HTTPError(403)
         except Exception as e:
             spawner.log.error(
-                "{} user options not allowed. selected options {}. allowed options {}. got an error:{}".format(
-                    spawner.user.name, spawner.user_options, image_options, e
-                )
+                f"{spawner.user.name} user options not allowed. selected options {spawner.user_options}. allowed options {image_options}. got an error:{e}"
             )
             raise web.HTTPError(403)
 
@@ -172,11 +156,10 @@ def hook(spawner):
             merge_configs(image["extra_container_config"], spawner.extra_pod_config)
         spawner.notebook_dir = image.get("notebook_dir", "")
 
-
     # TODO: Remove the if statement
     # NOTE: This if check will always be true since there is no way to select HPC
-    # Find highest available limit between tenant/user/group configs and set env variables
 
+    # Find highest available limit between tenant/user/group configs and set env variables
     if not spawner.user_options.get("hpc"):
         tenant_mem_limit = spawner.configs.get("mem_limit")
         mem_limits = {tenant_mem_limit: humanfriendly.parse_size(tenant_mem_limit)}
@@ -188,9 +171,7 @@ def hook(spawner):
                 mem_limits.update({mem_limit: humanfriendly.parse_size(mem_limit)})
             if cpu_limit:
                 cpu_limits.append(cpu_limit)
-        spawner.log.info(
-            "available limits -- mem: {} cpu:{}".format(mem_limits, cpu_limits)
-        )
+        spawner.log.info(f"available limits -- mem: {mem_limits} cpu:{cpu_limits}")
         spawner.mem_limit = max(mem_limits, key=mem_limits.get)
         spawner.cpu_limit = float(max(cpu_limits))
         # Set the guarantees really low because when None or 0,
@@ -217,7 +198,7 @@ def hook(spawner):
             env.update({
                 "MLM_LICENSE_FILE": spawner.configs.get("mlm_license_file", "")
             })
-    
+
         spawner.environment = env
 
     get_mounts(spawner)
@@ -226,16 +207,6 @@ def hook(spawner):
         get_licenses(spawner)
         get_ds_projects(spawner)
 
-
-# def merge_configs(x, y):
-#     merged_pod_config = {**x, **y}
-#     for key, value in merged_pod_config.items():
-#         if key in x and key in y:
-#             if type(x[key]) is list:
-#                 for z in x[key]:
-#                     merged_pod_config[key].append(z)
-#             else:
-#                 merged_pod_config[key].update(x[key])
 
 def merge_configs(x, y):
     """Deep-merge dict x into dict y, combining lists and dicts recursively."""
@@ -251,7 +222,6 @@ def merge_configs(x, y):
         else:
             merged[key] = value
     return merged
-
 
 
 def get_tas_user_projects(spawner):
@@ -334,9 +304,6 @@ async def get_notebook_options(spawner):
                         if eval(image.get("hpc_available", "False")):
                             spawner.hpc_available = True
 
-
-    # TODO: Look at everything that references hpc_available
-
     # only looped through user options -- check the tenant options for hpc
     if not hasattr(spawner, "hpc_available"):
         for image in spawner.configs.get("images"):
@@ -350,9 +317,7 @@ async def get_notebook_options(spawner):
     if len(image_options) > 1 or spawner.hpc_available:
         options = ""
         for image in image_options:
-            options = options + " <option value='{}'> {} </option>".format(
-                json.dumps(image), image.get("display_name", image["name"])
-            )
+            options += f" <option value='{json.dumps(image)}'> {image.get('display_name', image['name'])} </option>"
 
         if spawner.hpc_available:
             hpc = """<input type="checkbox" id="hpc" name="hpc" style="display: none">
@@ -392,10 +357,8 @@ async def get_notebook_options(spawner):
         image_description = (
             '<p id="image_description" style="display: inline-block"> </p>'
         )
-        select_images = '<select id="image" name="image" size="10" onchange="{}"> {} </select>'.format(
-            js, options
-        )
-        return "{}{}{}".format(select_images, image_description, hpc)
+        select_images = f'<select id="image" name="image" size="10" onchange="{js}"> {options} </select>'
+        return f"{select_images}{image_description}{hpc}"
 
 
 async def parse_form_data(formdata, spawner):
@@ -407,10 +370,6 @@ def get_tapis_access_data(spawner):
     """
     Returns the access token and base URL cached in the tapipy file
     """
-    # TODO figure out naming conventions that can follow k8 rules
-    # k8 names must consist of lower case alphanumeric characters, '-' or '.',
-    # and must start and end with an alphanumeric character
-    # do all tenant names follow that? usernames?
     token_file = os.path.join(get_user_token_dir(spawner.user.name), ".tapipy")
     spawner.log.info(
         f"spawner looking for token file: {token_file} for user: {spawner.user.name}"
@@ -431,7 +390,7 @@ def get_tapis_access_data(spawner):
                 data[0]["token"], options={"verify_signature": False}
             )
         except Exception as e:
-            print(f"Error decoding access token: {e}")
+            spawner.log.error(f"Error decoding access token: {e}")
 
         refresh_data = None
         if "exp" in decoded_data and decoded_data["exp"] < time.time():
@@ -456,22 +415,15 @@ def get_tapis_access_data(spawner):
                 refresh_data["expires_at"],
             )
             spawner.access_token = refresh_data["access_token"]
-            # spawner.log.info(f"Setting token: {spawner.access_token}")
             spawner.refresh_token = refresh_data["refresh_token"]
-            # spawner.log.info(f"Setting refresh token: {spawner.refresh_token}")
         else:
-            # spawner.log.info(f"Setting token: {spawner.access_token}")
             spawner.refresh_token = data[0]["refresh_token"]
-            # spawner.log.info(f"Setting refresh token: {spawner.refresh_token}")
 
         spawner.url = data[0]["api_server"]
-        # spawner.log.info(f"Setting url: {spawner.url}")
 
     except (TypeError, KeyError):
         spawner.log.warning(
-            "token file did not have an access token and/or an api_server. data: {}".format(
-                data
-            )
+            f"token file did not have an access token and/or an api_server. data: {data}"
         )
         return None
 
@@ -484,7 +436,7 @@ def get_tas_data(spawner):
     if not TAS_ROLE_PASS:
         spawner.log.error("No TAS_ROLE_PASS configured. Aborting.")
         return
-    url = "{}/users/username/{}".format(TAS_URL_BASE, spawner.user.name)
+    url = f"{TAS_URL_BASE}/users/username/{spawner.user.name}"
     headers = {"Content-type": "application/json", "Accept": "application/json"}
     try:
         rsp = requests.get(
@@ -494,8 +446,7 @@ def get_tas_data(spawner):
         )
     except Exception as e:
         spawner.log.error(
-            "Got an exception from TAS API. "
-            "Exception: {}. url: {}. TAS_ROLE_ACCT: {}".format(e, url, TAS_ROLE_ACCT)
+            f"Got an exception from TAS API. Exception: {e}. url: {url}. TAS_ROLE_ACCT: {TAS_ROLE_ACCT}"
         )
         return
     try:
@@ -503,10 +454,7 @@ def get_tas_data(spawner):
         spawner.log.info("TAS DATA: %s", data)
     except Exception as e:
         spawner.log.error(
-            "Did not get JSON from TAS API. rsp: {}"
-            "Exception: {}. url: {}. TAS_ROLE_ACCT: {}".format(
-                rsp, e, url, TAS_ROLE_ACCT
-            )
+            f"Did not get JSON from TAS API. rsp: {rsp} Exception: {e}. url: {url}. TAS_ROLE_ACCT: {TAS_ROLE_ACCT}"
         )
         return
     spawner.tas_gid = None
@@ -517,10 +465,7 @@ def get_tas_data(spawner):
         spawner.tas_homedir = data["result"]["homeDirectory"]
     except Exception as e:
         spawner.log.error(
-            "Did not get attributes from TAS API. rsp: {}"
-            "Exception: {}. url: {}. TAS_ROLE_ACCT: {}".format(
-                rsp, e, url, TAS_ROLE_ACCT
-            )
+            f"Did not get attributes from TAS API. rsp: {rsp} Exception: {e}. url: {url}. TAS_ROLE_ACCT: {TAS_ROLE_ACCT}"
         )
         return
 
@@ -550,7 +495,7 @@ def get_tas_data(spawner):
             except Exception:
                 continue
     except Exception as e:
-        spawner.log.error("Did not get gid's from ldap. rsp: {}".format(e))
+        spawner.log.error(f"Did not get gid's from ldap. rsp: {e}")
 
     if gids:
         spawner.supplemental_gids = gids
@@ -559,14 +504,7 @@ def get_tas_data(spawner):
     # we fall back on using the user's uid as the gid, which is (almost) always safe)
     if not spawner.tas_gid:
         spawner.tas_gid = spawner.configs.get("gid", spawner.tas_uid)
-    spawner.log.info(
-        # "Setting the following TAS data: uid:{} gid:{} homedir:{}".format(
-        #     spawner.tas_uid, spawner.tas_gid, spawner.tas_homedir
-        # )
-        "Setting the following TAS data: uid:{} gid:{}".format(
-            spawner.tas_uid, spawner.tas_gid
-        )
-    )
+    spawner.log.info(f"Setting the following TAS data: uid:{spawner.tas_uid} gid:{spawner.tas_gid}")
 
 
 def get_user_token_dir(username):
@@ -656,7 +594,7 @@ def get_mounts(spawner):
 
     template_vars = {
         "username": spawner.user.name,
-        "tenant_id": TENANT,  # TODO: do we need this?
+        "tenant_id": TENANT,
     }
 
     if hasattr(spawner, "tas_homedir"):
@@ -679,18 +617,13 @@ def get_mounts(spawner):
             if item["type"] == "nfs":
                 vol["server"] = item["server"]
 
-            # if item["path"] == "/work2/{tas_homedir}":
-            #     # TODO: remove this check
-            #     if spawner.init_gid == 0:
-            #         continue
-
             spawner.volumes.append({"name": vol_name, item["type"]: vol})
 
             spawner.volume_mounts.append(
                 {"mountPath": item["mountPath"], "name": vol_name}
             )
-        spawner.log.info("volumes: {}".format(spawner.volumes))
-        spawner.log.info("volume_mounts: {}".format(spawner.volume_mounts))
+        spawner.log.info(f"volumes: {spawner.volumes}")
+        spawner.log.info(f"volume_mounts: {spawner.volume_mounts}")
 
 
 # DesignSafe-only: project NFS mounts
