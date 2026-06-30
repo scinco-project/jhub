@@ -1,0 +1,15 @@
+[project]
+name = "jupyterhub"
+version = "4.0.0"
+description = "JupyterHub dependencies"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "humanfriendly>=10.0",
+    "jwt>=1.4.0",
+    "ldap3>=2.9.1",
+    "requests>=2.34.2",
+    "tapipy>=25.4.0",
+    "tornado>=6.5.6",
+    "urllib3>=2.7.0",
+]

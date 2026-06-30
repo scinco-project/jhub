@@ -1,2 +1,11 @@
-.pylintrc
-.vscode/*
+__pycache__/
+.python-version
+
+.venv/
+venv/
+
+.DS_Store
+
+.vscode/
+
+.env

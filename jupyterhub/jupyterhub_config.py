@@ -104,9 +104,8 @@ c.JupyterHub.authenticator_class = TapisOAuthenticator
 c.TapisOAuthenticator.oauth_callback_url = CONFIGS["oauth_callback_url"]
 c.TapisOAuthenticator.client_id = CONFIGS["tapis_client_id"]
 c.TapisOAuthenticator.client_secret = CONFIGS["tapis_client_key"]
-c.TapisOAuthenticator.authorize_url = "{}/oauth2/authorize".format(
-    CONFIGS.get("tapis_base_url").rstrip("/")
-)
+c.TapisOAuthenticator.authorize_url = f"{CONFIGS.get("tapis_base_url").rstrip("/")}/oauth2/authorize"
+
 c.Authenticator.admin_users = CONFIGS.get("admin_users", [])
 c.Authenticator.allow_all = True
 
