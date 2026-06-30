@@ -126,21 +126,13 @@ def hook(spawner):
         spawner.log.info(f"Image: {image}")
 
         try:
-            spawner.log.info(
-                f"Checking user options: image-{image} hpc-{spawner.user_options.get('hpc')} against metadata: {image_options}"
-            )
-            allowed_options = next(
+            spawner.log.info(f"Checking user options: image-{image} against metadata: {image_options}")
+            next(
                 option
                 for option in image_options
                 if option["name"] == image["name"]
                 and option["display_name"] == image["display_name"]
             )
-            if spawner.user_options.get("hpc"):
-                if not eval(allowed_options.get("hpc_available", "False")):
-                    spawner.log.error(
-                        f"hpc is not available for this image. {spawner.user.name} -- {allowed_options}"
-                    )
-                    raise web.HTTPError(403)
         except Exception as e:
             spawner.log.error(
                 f"{spawner.user.name} user options not allowed. selected options {spawner.user_options}. allowed options {image_options}. got an error:{e}"
@@ -156,50 +148,46 @@ def hook(spawner):
             merge_configs(image["extra_container_config"], spawner.extra_pod_config)
         spawner.notebook_dir = image.get("notebook_dir", "")
 
-    # TODO: Remove the if statement
-    # NOTE: This if check will always be true since there is no way to select HPC
-
     # Find highest available limit between tenant/user/group configs and set env variables
-    if not spawner.user_options.get("hpc"):
-        tenant_mem_limit = spawner.configs.get("mem_limit")
-        mem_limits = {tenant_mem_limit: humanfriendly.parse_size(tenant_mem_limit)}
-        cpu_limits = [spawner.configs.get("cpu_limit")]
-        for item in spawner.user_configs:
-            mem_limit = item["value"].get("mem_limit")
-            cpu_limit = item["value"].get("cpu_limit")
-            if mem_limit:
-                mem_limits.update({mem_limit: humanfriendly.parse_size(mem_limit)})
-            if cpu_limit:
-                cpu_limits.append(cpu_limit)
-        spawner.log.info(f"available limits -- mem: {mem_limits} cpu:{cpu_limits}")
-        spawner.mem_limit = max(mem_limits, key=mem_limits.get)
-        spawner.cpu_limit = float(max(cpu_limits))
-        # Set the guarantees really low because when None or 0,
-        # it sets a resource request for an amount equal to the limit
-        spawner.mem_guarantee = ".001K"
-        spawner.cpu_guarantee = float(0.001)
+    tenant_mem_limit = spawner.configs.get("mem_limit")
+    mem_limits = {tenant_mem_limit: humanfriendly.parse_size(tenant_mem_limit)}
+    cpu_limits = [spawner.configs.get("cpu_limit")]
+    for item in spawner.user_configs:
+        mem_limit = item["value"].get("mem_limit")
+        cpu_limit = item["value"].get("cpu_limit")
+        if mem_limit:
+            mem_limits.update({mem_limit: humanfriendly.parse_size(mem_limit)})
+        if cpu_limit:
+            cpu_limits.append(cpu_limit)
+    spawner.log.info(f"available limits -- mem: {mem_limits} cpu:{cpu_limits}")
+    spawner.mem_limit = max(mem_limits, key=mem_limits.get)
+    spawner.cpu_limit = float(max(cpu_limits))
+    # Set the guarantees really low because when None or 0,
+    # it sets a resource request for an amount equal to the limit
+    spawner.mem_guarantee = ".001K"
+    spawner.cpu_guarantee = float(0.001)
 
-        user = spawner.user.name
-        uid = str(spawner.uid)
-        gid = str(spawner.gid)
+    user = spawner.user.name
+    uid = str(spawner.uid)
+    gid = str(spawner.gid)
 
-        env = {
-            "MKL_NUM_THREADS": max(cpu_limits),
-            "NUMEXPR_NUM_THREADS": max(cpu_limits),
-            "OMP_NUM_THREADS": max(cpu_limits),
-            "OPENBLAS_NUM_THREADS": max(cpu_limits),
-            "SCINCO_JUPYTERHUB_IMAGE": spawner.image,
-            "HUB_USER": user,
-            "HUB_UID": uid,
-            "HUB_GID": gid,
-        }
+    env = {
+        "MKL_NUM_THREADS": max(cpu_limits),
+        "NUMEXPR_NUM_THREADS": max(cpu_limits),
+        "OMP_NUM_THREADS": max(cpu_limits),
+        "OPENBLAS_NUM_THREADS": max(cpu_limits),
+        "SCINCO_JUPYTERHUB_IMAGE": spawner.image,
+        "HUB_USER": user,
+        "HUB_UID": uid,
+        "HUB_GID": gid,
+    }
 
-        if IS_DESIGNSAFE:
-            env.update({
-                "MLM_LICENSE_FILE": spawner.configs.get("mlm_license_file", "")
-            })
+    if IS_DESIGNSAFE:
+        env.update({
+            "MLM_LICENSE_FILE": spawner.configs.get("mlm_license_file", "")
+        })
 
-        spawner.environment = env
+    spawner.environment = env
 
     get_mounts(spawner)
 
@@ -301,64 +289,27 @@ async def get_notebook_options(spawner):
                     for image in images:
                         if image not in image_options:
                             image_options += [image]
-                        if eval(image.get("hpc_available", "False")):
-                            spawner.hpc_available = True
-
-    # only looped through user options -- check the tenant options for hpc
-    if not hasattr(spawner, "hpc_available"):
-        for image in spawner.configs.get("images"):
-            if eval(image.get("hpc_available", "False")):
-                spawner.hpc_available = True
-                break
-            spawner.hpc_available = False
 
     image_options = sorted(image_options, key=lambda d: d["name"])
 
-    if len(image_options) > 1 or spawner.hpc_available:
+    if len(image_options) > 1:
         options = ""
         for image in image_options:
             options += f" <option value='{json.dumps(image)}'> {image.get('display_name', image['name'])} </option>"
 
-        if spawner.hpc_available:
-            hpc = """<input type="checkbox" id="hpc" name="hpc" style="display: none">
-                <label for="hpc" id="hpc_label" style="display: none">Run on HPC</label>
-                """
-            js = """(function hpc(){
-                var select_element = document.getElementById('image');
-                var value = select_element.value || select_element.options[select_element.selectedIndex].value;
-                var value = JSON.parse(value);
-                document.getElementById('image_description').innerText = ''
-                if ('description' in value) {
-                    document.getElementById('image_description').innerText = value['description'];
-                }
-                if (value['hpc_available']) {
-                    document.getElementById('hpc').checked = false;
-                    document.getElementById('hpc').style.display = 'inline-block';
-                    document.getElementById('hpc_label').style.display = 'inline-block';
-                } else {
-                    document.getElementById('hpc').checked = false;
-                    document.getElementById('hpc').style.display = 'none';
-                    document.getElementById('hpc_label').style.display = 'none';
-                }
-            })()"""
-        else:
-            js = """(function hpc(){
-                            var select_element = document.getElementById('image');
-                            var value = select_element.value || select_element.options[select_element.selectedIndex].value;
-                            var value = JSON.parse(value);
-                            document.getElementById('image_description').innerText = ''
-                            if ('description' in value) {
-                                document.getElementById('image_description').innerText = value['description'];
-                            }
-                        })()"""
+        js = """(function(){
+            var select_element = document.getElementById('image');
+            var value = select_element.value || select_element.options[select_element.selectedIndex].value;
+            var value = JSON.parse(value);
+            document.getElementById('image_description').innerText = ''
+            if ('description' in value) {
+                document.getElementById('image_description').innerText = value['description'];
+            }
+        })()"""
 
-            hpc = ""
-
-        image_description = (
-            '<p id="image_description" style="display: inline-block"> </p>'
-        )
+        image_description = '<p id="image_description" style="display: inline-block"> </p>'
         select_images = f'<select id="image" name="image" size="10" onchange="{js}"> {options} </select>'
-        return f"{select_images}{image_description}{hpc}"
+        return f"{select_images}{image_description}"
 
 
 async def parse_form_data(formdata, spawner):
