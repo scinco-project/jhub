@@ -4,6 +4,13 @@ __pycache__/
 .venv/
 venv/
 
+local-dev/.venv/
+local-dev/node_modules/
+local-dev/package.json
+local-dev/package-lock.json
+local-dev/jupyterhub_local_data/
+local-dev/jupyterhub-proxy.pid
+
 .DS_Store
 
 .vscode/
