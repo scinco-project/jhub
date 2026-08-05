@@ -16,17 +16,37 @@ DEPLOYMENT_TARGET = os.environ.get("DEPLOYMENT_TARGET", "").lower()
 
 IS_TACC = DEPLOYMENT_TARGET == "tacc"
 IS_DESIGNSAFE = DEPLOYMENT_TARGET == "designsafe"
+IS_TRAINING = DEPLOYMENT_TARGET == "training"
 
+DEPLOYMENTS = {
+    "tacc": {
+        "RESTRICTED_ID": "66657",
+        "RESTRICTED_LABEL": "hetdex",
+        "PORTALS_BASE_URL": "https://portals.tapis.io",
+        "TAPIS_BASE_URL": "https://tacc.tapis.io",
+        "JUPYTER_HOME": "/home/jovyan",
+    },
+    "designsafe": {
+        "TAPIS_BASE_URL": "https://designsafe.tapis.io",
+        "JUPYTER_HOME": "/home/jupyter",
+    },
+}
+deployment_defaults = DEPLOYMENTS.get(DEPLOYMENT_TARGET, {})
 
 INSTANCE = os.environ.get("INSTANCE")
 TENANT = os.environ.get("TENANT")
-RESTRICTED_ID = os.environ.get("RESTRICTED_ID", "66657")
-RESTRICTED_LABEL = os.environ.get("RESTRICTED_LABEL", "hetdex")
+RESTRICTED_ID = os.environ.get("RESTRICTED_ID", deployment_defaults.get("RESTRICTED_ID", "66657"))
+RESTRICTED_LABEL = os.environ.get("RESTRICTED_LABEL", deployment_defaults.get("RESTRICTED_LABEL", "hetdex"))
 tapis_service_token = os.environ.get("TAPIS_SERVICE_TOKEN")
 portals_service_token = os.environ.get("PORTALS_SERVICE_TOKEN")
-portals_base_url = os.environ.get("PORTALS_BASE_URL", "https://portals.tapis.io")
-tapis_base_url = os.environ.get("TAPIS_BASE_URL", "https://tacc.tapis.io").rstrip()
+portals_base_url = os.environ.get(
+    "PORTALS_BASE_URL", deployment_defaults.get("PORTALS_BASE_URL", "https://portals.tapis.io")
+)
+tapis_base_url = (
+    os.environ.get("TAPIS_BASE_URL") or deployment_defaults.get("TAPIS_BASE_URL", "https://tacc.tapis.io")
+).rstrip()
 meta_base_url = os.environ.get("META_BASE_URL", "https://tacc.tapis.io")
+jupyter_home = deployment_defaults.get("JUPYTER_HOME", "/home/jovyan")
 database = os.environ.get("TAPIS_DATABASE")
 collection = os.environ.get("TAPIS_COLLECTION")
 
@@ -35,15 +55,6 @@ if not tapis_service_token:
 
 # Tenant specific environment cariables
 projects_url = os.environ.get("PROJECTS_URL", "https://designsafe-ci.org")
-
-if IS_TACC:
-    RESTRICTED_ID = os.environ.get("RESTRICTED_ID", "66657")
-    RESTRICTED_LABEL = os.environ.get("RESTRICTED_LABEL", "hetdex")
-    portals_service_token = os.environ.get("PORTALS_SERVICE_TOKEN")
-    portals_base_url = os.environ.get("PORTALS_BASE_URL", "https://portals.tapis.io")
-
-if IS_DESIGNSAFE:
-    tapis_base_url = tapis_base_url or "https://designsafe.tapis.io"
 
 
 # Calls to the meta service to get configs related to the JupyterHub instance

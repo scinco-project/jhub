@@ -11,14 +11,17 @@ import requests
 import urllib3
 
 from .common import (
+    DEPLOYMENT_TARGET,
     INSTANCE,
     IS_DESIGNSAFE,
     IS_TACC,
+    IS_TRAINING,
     RESTRICTED_ID,
     RESTRICTED_LABEL,
     TENANT,
     get_tenant_configs,
     get_user_configs,
+    jupyter_home,
     refresh_access_token,
     safe_string,
     save_token,
@@ -38,6 +41,13 @@ TAS_ROLE_PASS = os.environ.get("TAS_ROLE_PASS")
 
 LDAP_PASS = os.environ.get("LDAP_PASS")
 
+# Extra setup steps to run (in order) for a given deployment, after the
+# shared spawner setup below. Names are resolved at call time via globals()
+# so tests can still patch these functions by name.
+DEPLOYMENT_EXTRA_HOOKS = {
+    "designsafe": ["get_licenses", "get_ds_projects"],
+}
+
 
 # Main configuration hook for the KubeSpawner
 
@@ -56,18 +66,7 @@ def hook(spawner):
         raise web.HTTPError(403)
 
     # Check if user only has restricted allocation
-    if IS_TACC:
-        restricted = is_user_restricted(spawner)
-        spawner.log.info(f"Restricted? {restricted}")
-
-        # If user has allocation: keep as is
-        # If user only has specific "restricted" allocation:
-        # set spawner.configs to restricted metadata group
-        if restricted:
-            spawner.configs = get_tenant_configs(restricted)
-            spawner.log.info(f"spawner configs: {spawner.configs}")
-            spawner.user_configs = get_user_configs(spawner.user.name)
-            spawner.log.info(f"spawner user configs: {spawner.user_configs}")
+    apply_restricted_allocation(spawner)
 
     # Check if access token is valid
     get_tapis_access_data(spawner)
@@ -75,11 +74,7 @@ def hook(spawner):
         f"access token: {spawner.access_token}, refresh token: {spawner.refresh_token}, url: {spawner.url}"
     )
 
-    # If in training instance, default to 100 uid/gid
-    if IS_TACC and "training" in tapis_base_url:
-        spawner.uid = 100
-        spawner.gid = 100
-    else:
+    if not apply_training_uid_gid(spawner):
         get_tas_data(spawner)
         if not spawner.tas_uid or not spawner.tas_gid:
             raise web.HTTPError(403)
@@ -191,9 +186,8 @@ def hook(spawner):
 
     get_mounts(spawner)
 
-    if IS_DESIGNSAFE:
-        get_licenses(spawner)
-        get_ds_projects(spawner)
+    for hook_name in DEPLOYMENT_EXTRA_HOOKS.get(DEPLOYMENT_TARGET, []):
+        globals()[hook_name](spawner)
 
 
 def merge_configs(x, y):
@@ -238,6 +232,8 @@ def is_user_allowed(spawner):
     """
     A user is allowed if they have any allocation
     """
+    if IS_TRAINING:
+        return True
     user = spawner.user.name
     spawner.log.info(f"Check if user has any allocation: {user}")
     return bool(spawner.tas_data.get("result"))
@@ -251,13 +247,51 @@ def is_user_restricted(spawner):
     user = spawner.user.name
     spawner.log.info(f"Check tas for restricted project for user: {user}")
     results = spawner.tas_data.get("result", [])
-    if len(results) == 1:
+    if results and len(results) == 1:
         item_id = results[0].get("id")
         if item_id is not None and str(item_id) == RESTRICTED_ID:
             spawner.log.info(f"Found restricted project for user: {user}")
             spawner.extra_labels = {"restrictedProject": RESTRICTED_LABEL}
             return True
     return False
+
+
+def apply_restricted_allocation(spawner):
+    """TACC-only: if the user's only allocation is the restricted project,
+    switch spawner.configs/user_configs to the restricted metadata group."""
+    restricted = is_user_restricted(spawner)
+    spawner.log.info(f"Restricted? {restricted}")
+
+    if not IS_TACC and restricted:
+        raise web.HTTPError(403)
+    if not IS_TACC:
+        return
+
+    if restricted:
+        spawner.configs = get_tenant_configs(restricted)
+        spawner.log.info(f"spawner configs: {spawner.configs}")
+        spawner.user_configs = get_user_configs(spawner.user.name)
+        spawner.log.info(f"spawner user configs: {spawner.user_configs}")
+
+
+def apply_training_uid_gid(spawner):
+    """TACC-only: training instances run every user under uid/gid 100.
+
+    Returns True if applied, so the caller can skip the normal TAS lookup.
+    """
+    if not IS_TRAINING:
+        return False
+    spawner.uid = 100
+    spawner.gid = 100
+    return True
+
+
+def get_tenant_configs_for_user(spawner):
+    """TACC-only: fetch tenant configs, respecting the restricted-allocation
+    override. Other deployments always get the unrestricted configs."""
+    if not IS_TACC:
+        return get_tenant_configs()
+    return get_tenant_configs(restricted=is_user_restricted(spawner))
 
 
 async def get_notebook_options(spawner):
@@ -269,11 +303,7 @@ async def get_notebook_options(spawner):
         spawner.log.error(f"UNAUTHORIZED USER: {spawner.user.name} ATTEMPTING TO ACCESS JUPYTERHUB")
         raise web.HTTPError(403)
 
-    if IS_TACC:
-        restricted = is_user_restricted(spawner)
-        spawner.configs = get_tenant_configs(restricted=restricted)
-    else:
-        spawner.configs = get_tenant_configs()
+    spawner.configs = get_tenant_configs_for_user(spawner)
 
     spawner.log.info(f"spawner configs: {spawner.configs}")
     spawner.user_configs = get_user_configs(spawner.user.name)
@@ -468,8 +498,6 @@ def get_mounts(spawner):
     safe_instance = safe_string(INSTANCE).lower()
     tapipy_safe_name = f"{safe_username}-{safe_tenant}-{safe_instance}-jhub-tapipy"
     current_safe_name = f"{safe_username}-{safe_tenant}-{safe_instance}-jhub-current"
-
-    jupyter_home = "/home/jupyter" if IS_DESIGNSAFE else "/home/jovyan"
 
     spawner.init_containers = [
         {
