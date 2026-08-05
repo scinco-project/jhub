@@ -45,7 +45,7 @@ LDAP_PASS = os.environ.get("LDAP_PASS")
 # shared spawner setup below. Names are resolved at call time via globals()
 # so tests can still patch these functions by name.
 DEPLOYMENT_EXTRA_HOOKS = {
-    "designsafe": ["get_licenses", "get_ds_projects"],
+    "designsafe": ["get_licenses", "get_ds_projects", "update_ds_env"],
 }
 
 
@@ -176,11 +176,6 @@ def hook(spawner):
         "HUB_UID": uid,
         "HUB_GID": gid,
     }
-
-    if IS_DESIGNSAFE:
-        env.update({
-            "MLM_LICENSE_FILE": spawner.configs.get("mlm_license_file", "")
-        })
 
     spawner.environment = env
 
@@ -674,6 +669,8 @@ def get_ds_projects(spawner):
 
 def get_licenses(spawner):
     """Fetch MATLAB and LSDYNA licenses."""
+
+    # This line should be unnecessary
     if not IS_DESIGNSAFE:
         return
     if not spawner.access_token:
@@ -692,3 +689,9 @@ def get_licenses(spawner):
             spawner.environment[env_key] = data["license"]
         except Exception as e:
             spawner.log.warning(f"Exception fetching {license_type} license for {spawner.user.name}: {e}")
+
+
+def update_ds_env(spawner):
+    """DesignSafe Only: Update env to include mlm license file"""
+    spawner.environment["MLM_LICENSE_FILE"] = spawner.configs.get("mlm_license_file", "")
+
