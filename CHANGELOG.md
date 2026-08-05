@@ -1,15 +1,30 @@
 # Changelog
 All notable changes to this project will be documented in this file
 
+## [26Q2.0] (June 23, 2026)
+### 🚀 Added
+- Tenant-specific behavior via `IS_TACC` and `IS_DESIGNSAFE` flags — controls allocation checks, uid/gid resolution, and feature availability per deployment
+- DesignSafe only: project NFS mounts fetched at spawn time via the projects API (`get_ds_projects`)
+- DesignSafe only: MATLAB and LSDYNA license injection into container environment (`get_licenses`)
+- DesignSafe only: `MLM_LICENSE_FILE` env variable set at spawn
+### 🔧 Modified
+- Removed dead/commented-out code, converted all `.format()` calls to f-strings, removed stale TODO/NOTE comments
+
+## [3.1.6] (May 8, 2026)
+### 🚀 Added
+- Updated metadata calls to be more robust
+### 🔧 Modified
+- Update to allocation checks
+
 ## [3.1.3] (2025)
 ### 🚀 Added
 - Checks for training accounts
 - Check for expired token, and refresh automatically
 - Assign restricted settings to users on restricted allocation
-- Block useres that have no allocation
-### 🚀 Modified
+- Block users that have no allocation
+### 🔧 Modified
 - Updated to JupyterHub v3
-### 🚀 Deleted
+### 🔧 Deleted
 - Removed agavepy and all references to it
 
 ## [2.0.0] (2021)

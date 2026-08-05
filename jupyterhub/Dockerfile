@@ -5,7 +5,7 @@ FROM jupyterhub/jupyterhub:3.0.0
 RUN apt-get update
 RUN apt-get install -y build-essential curl chromium-browser unzip vim git
 
-RUN pip install oauthenticator jupyterhub-kubespawner==4.3.0 notebook ipdb humanfriendly git+https://github.com/kubernetes-client/python.git selenium webdriver-manager
+RUN pip install oauthenticator jupyterhub-kubespawner==4.3.0 notebook ipdb humanfriendly kubernetes==28.1.0 selenium webdriver-manager
 RUN pip install pyjwt[crypto]
 RUN pip install --upgrade pip
 RUN pip install tapipy --ignore-installed certifi 
