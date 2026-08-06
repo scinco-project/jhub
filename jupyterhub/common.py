@@ -35,8 +35,8 @@ deployment_defaults = DEPLOYMENTS.get(DEPLOYMENT_TARGET, {})
 
 INSTANCE = os.environ.get("INSTANCE")
 TENANT = os.environ.get("TENANT")
-RESTRICTED_ID = os.environ.get("RESTRICTED_ID", deployment_defaults.get("RESTRICTED_ID", "66657"))
-RESTRICTED_LABEL = os.environ.get("RESTRICTED_LABEL", deployment_defaults.get("RESTRICTED_LABEL", "hetdex"))
+RESTRICTED_ID = os.environ.get("RESTRICTED_ID", deployment_defaults.get("RESTRICTED_ID", ""))
+RESTRICTED_LABEL = os.environ.get("RESTRICTED_LABEL", deployment_defaults.get("RESTRICTED_LABEL", ""))
 tapis_service_token = os.environ.get("TAPIS_SERVICE_TOKEN")
 portals_service_token = os.environ.get("PORTALS_SERVICE_TOKEN")
 portals_base_url = os.environ.get(

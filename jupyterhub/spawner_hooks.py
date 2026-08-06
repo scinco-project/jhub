@@ -186,7 +186,7 @@ def hook(spawner):
 
 
 def merge_configs(x, y):
-    """Deep-merge dict x into dict y, combining lists and dicts recursively."""
+    """Deep-merge dict x into dict y, combining lists and dicts."""
     merged = {**y}
     for key, value in x.items():
         if key in merged:
