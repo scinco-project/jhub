@@ -7,6 +7,7 @@ import time
 
 import requests
 from tapipy.tapis import Tapis
+from tenacity import retry, retry_if_result, stop_after_attempt, wait_fixed
 
 logger = logging.getLogger("JupyterHub")
 
@@ -78,30 +79,46 @@ def get_config_metadata_name(restricted):
     )
 
 
-def get_tenant_configs(restricted=False, retry=True):
+def _return_none(retry_state):
+    return None
+
+
+def _log_retry(retry_state):
+    logger.warning(
+        f"Retrying {retry_state.fn.__name__}, attempt {retry_state.attempt_number}"
+    )
+
+
+@retry(
+    retry=retry_if_result(lambda metadata: not metadata),
+    stop=stop_after_attempt(3),
+    wait=wait_fixed(1),
+    retry_error_callback=_return_none,
+    before_sleep=_log_retry,
+)
+def get_tenant_configs(restricted=False):
     """Retrive tenant config from metadata"""
     t = Tapis(base_url=meta_base_url, jwt=tapis_service_token)
     q = {"name": get_config_metadata_name(restricted)}
     metadata = get_metadata(t, q)
     if not metadata:
-        if retry:
-            time.sleep(1)
-            return get_tenant_configs(restricted, False)
         return None
     logger.error(f"Loaded tenant config: {metadata}")
     return metadata[0]["value"]
 
 
-def get_user_configs(username, retry=True):
+@retry(
+    retry=retry_if_result(lambda metadata: not metadata),
+    stop=stop_after_attempt(3),
+    wait=wait_fixed(1),
+    retry_error_callback=_return_none,
+    before_sleep=_log_retry,
+)
+def get_user_configs(username):
     """Retrieve any groups user belongs to"""
     t = Tapis(base_url=meta_base_url, jwt=tapis_service_token)
     q = {"value.user": username, "value.tenant": TENANT, "value.instance": INSTANCE}
-    metadata = get_metadata(t, q)
-    if not metadata:
-        if retry:
-            time.sleep(1)
-            return get_user_configs(username, False)
-    return metadata
+    return get_metadata(t, q)
 
 
 # Functions that manage the users access token
