@@ -34,11 +34,18 @@ DEPLOYMENTS = {
 }
 deployment_defaults = DEPLOYMENTS.get(DEPLOYMENT_TARGET, {})
 
-INSTANCE = os.environ.get("INSTANCE")
-TENANT = os.environ.get("TENANT")
+def _require_env(name: str) -> str:
+    value = os.environ.get(name)
+    if not value:
+        raise Exception(f"Missing {name} configuration.")
+    return value
+
+
+INSTANCE = _require_env("INSTANCE")
+TENANT = _require_env("TENANT")
+tapis_service_token = _require_env("TAPIS_SERVICE_TOKEN")
 RESTRICTED_ID = os.environ.get("RESTRICTED_ID", deployment_defaults.get("RESTRICTED_ID", ""))
 RESTRICTED_LABEL = os.environ.get("RESTRICTED_LABEL", deployment_defaults.get("RESTRICTED_LABEL", ""))
-tapis_service_token = os.environ.get("TAPIS_SERVICE_TOKEN")
 portals_service_token = os.environ.get("PORTALS_SERVICE_TOKEN")
 portals_base_url = os.environ.get(
     "PORTALS_BASE_URL", deployment_defaults.get("PORTALS_BASE_URL", "https://portals.tapis.io")
@@ -51,9 +58,6 @@ jupyter_home = deployment_defaults.get("JUPYTER_HOME", "/home/jovyan")
 database = os.environ.get("TAPIS_DATABASE")
 collection = os.environ.get("TAPIS_COLLECTION")
 
-if not tapis_service_token:
-    raise Exception("Missing TAPIS_SERVICE_TOKEN configuration.")
-
 # Tenant specific environment cariables
 projects_url = os.environ.get("PROJECTS_URL", "https://designsafe-ci.org")
 
@@ -61,16 +65,17 @@ projects_url = os.environ.get("PROJECTS_URL", "https://designsafe-ci.org")
 # Calls to the meta service to get configs related to the JupyterHub instance
 # We also look for user specific configs (ie: if the user is in a group)
 
-def get_metadata(t, q):
+def get_metadata(t: Tapis, q: dict) -> dict | None:
     try:
-        response = json.loads(t.meta.listDocuments(db=database, collection=collection, filter=json.dumps(q)))
+        # no static type info exists for tapipy, ignoring
+        response = json.loads(t.meta.listDocuments(db=database, collection=collection, filter=json.dumps(q)))  # pyright: ignore[reportAttributeAccessIssue]
     except Exception as e:
         logger.error(f"Unable to get metadata, error: {e}")
         return None
     return response
 
 
-def get_config_metadata_name(restricted):
+def get_config_metadata_name(restricted: bool) -> str:
     """Return name of config metadata"""
     return (
         f"config.{TENANT}.{INSTANCE}.jhub"
@@ -79,11 +84,11 @@ def get_config_metadata_name(restricted):
     )
 
 
-def _return_none(retry_state):
+def _return_none(retry_state) -> None:
     return None
 
 
-def _log_retry(retry_state):
+def _log_retry(retry_state) -> None:
     logger.warning(
         f"Retrying {retry_state.fn.__name__}, attempt {retry_state.attempt_number}"
     )
@@ -96,13 +101,13 @@ def _log_retry(retry_state):
     retry_error_callback=_return_none,
     before_sleep=_log_retry,
 )
-def get_tenant_configs(restricted=False):
+def get_tenant_configs(restricted:bool = False) -> dict:
     """Retrive tenant config from metadata"""
     t = Tapis(base_url=meta_base_url, jwt=tapis_service_token)
     q = {"name": get_config_metadata_name(restricted)}
     metadata = get_metadata(t, q)
     if not metadata:
-        return None
+        return {}
     logger.error(f"Loaded tenant config: {metadata}")
     return metadata[0]["value"]
 
@@ -114,7 +119,7 @@ def get_tenant_configs(restricted=False):
     retry_error_callback=_return_none,
     before_sleep=_log_retry,
 )
-def get_user_configs(username):
+def get_user_configs(username: str) -> dict | None:
     """Retrieve any groups user belongs to"""
     t = Tapis(base_url=meta_base_url, jwt=tapis_service_token)
     q = {"value.user": username, "value.tenant": TENANT, "value.instance": INSTANCE}
@@ -123,7 +128,7 @@ def get_user_configs(username):
 
 # Functions that manage the users access token
 
-def refresh_access_token(refresh_token, username):
+def refresh_access_token(refresh_token: str, username: str) -> dict | None:
     logger.info(f"Refreshing access token for user {username}")
 
     try:
@@ -150,16 +155,30 @@ def refresh_access_token(refresh_token, username):
         logger.error(f"Unable to refresh access token for {username}, error: {e}")
 
 
-def get_user_token_dir(username):
+def get_user_token_dir(username: str) -> str:
     return os.path.join("/tapis/jupyter/tokens", INSTANCE, TENANT, username)
 
 
 def save_token(
-    access_token, refresh_token, username, created_at, expires_in, expires_at
-):
+    access_token: str,
+    refresh_token: str,
+    username: str,
+    created_at: str,
+    expires_in: str,
+    expires_at: str
+) -> None:
     try:
         configs = get_tenant_configs()
+
+        if not configs:
+            raise ValueError("Missing tenant configs")
+
         tenant_id = configs.get("tapis_tenant_id")
+        configs_base_url = configs.get("tapis_base_url")
+        oauth_validate_cert = configs.get("oauth_validate_cert")
+        if not configs_base_url or oauth_validate_cert is None:
+            raise ValueError("Missing tapis_base_url or oauth_validate_cert in tenant configs")
+        configs_base_url = configs_base_url.rstrip("/")
 
         # tapipy file
         d = [
@@ -169,8 +188,8 @@ def save_token(
                 "tenant_id": tenant_id,
                 "api_key": configs.get("tapis_client_id"),
                 "api_secret": configs.get("tapis_client_secret"),
-                "api_server": configs.get("tapis_base_url").rstrip("/"),
-                "verify": eval(configs.get("oauth_validate_cert")),
+                "api_server": configs_base_url,
+                "verify": eval(oauth_validate_cert),
             }
         ]
         with open(os.path.join(get_user_token_dir(username), ".tapipy"), "w") as f:
@@ -179,7 +198,7 @@ def save_token(
         # CLI file
         cli_data = {
             "tenantid": tenant_id,
-            "baseurl": configs.get("tapis_base_url").rstrip("/"),
+            "baseurl": configs_base_url,
             "devurl": "",
             "apikey": configs.get("tapis_client_id"),
             "username": username,
@@ -198,7 +217,7 @@ def save_token(
 
 # String utilities
 
-def safe_string(to_escape, safe=None, escape_char="-"):
+def safe_string(to_escape: str, safe=None, escape_char="-") -> str:
     """Escape a string so that it only contains characters in a safe set.
     Characters outside the safe list will be escaped with _%x_,
     where %x is the hex value of the character.
