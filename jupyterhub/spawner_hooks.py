@@ -3,12 +3,14 @@ import json
 import os
 import re
 import time
+from typing import Any
 
 import certifi
 import humanfriendly
 import jwt
 import requests
 import urllib3
+from requests.auth import HTTPBasicAuth
 
 from .common import (
     DEPLOYMENT_TARGET,
@@ -51,7 +53,7 @@ DEPLOYMENT_EXTRA_HOOKS = {
 
 # Main configuration hook for the KubeSpawner
 
-def hook(spawner):
+def hook(spawner: Any) -> None:
     """Sets up the user's notebook server."""
     spawner.log.info("In main hook function")
     spawner.start_timeout = 60 * 5
@@ -155,7 +157,7 @@ def hook(spawner):
         if cpu_limit:
             cpu_limits.append(cpu_limit)
     spawner.log.info(f"available limits -- mem: {mem_limits} cpu:{cpu_limits}")
-    spawner.mem_limit = max(mem_limits, key=mem_limits.get)
+    spawner.mem_limit = max(mem_limits, key=lambda k: mem_limits[k])
     spawner.cpu_limit = float(max(cpu_limits))
     # Set the guarantees really low because when None or 0,
     # it sets a resource request for an amount equal to the limit
@@ -185,7 +187,7 @@ def hook(spawner):
         globals()[hook_name](spawner)
 
 
-def merge_configs(x, y):
+def merge_configs(x: dict, y: dict) -> dict:
     """Deep-merge dict x into dict y, combining lists and dicts."""
     merged = {**y}
     for key, value in x.items():
@@ -201,7 +203,7 @@ def merge_configs(x, y):
     return merged
 
 
-def get_tas_user_projects(spawner):
+def get_tas_user_projects(spawner: Any) -> dict:
     """
     Retrieve user projects from TAS
     """
@@ -223,7 +225,7 @@ def get_tas_user_projects(spawner):
         return {}
 
 
-def is_user_allowed(spawner):
+def is_user_allowed(spawner: Any) -> bool:
     """
     A user is allowed if they have any allocation
     """
@@ -234,7 +236,7 @@ def is_user_allowed(spawner):
     return bool(spawner.tas_data.get("result"))
 
 
-def is_user_restricted(spawner):
+def is_user_restricted(spawner: Any) -> bool:
     """
     If the user is only in the restricted HETDEX project,
     they are given the restricted user configs.
@@ -251,7 +253,7 @@ def is_user_restricted(spawner):
     return False
 
 
-def apply_restricted_allocation(spawner):
+def apply_restricted_allocation(spawner: Any) -> None:
     """TACC-only: if the user's only allocation is the restricted project,
     switch spawner.configs/user_configs to the restricted metadata group."""
     restricted = is_user_restricted(spawner)
@@ -269,7 +271,7 @@ def apply_restricted_allocation(spawner):
         spawner.log.info(f"spawner user configs: {spawner.user_configs}")
 
 
-def apply_training_uid_gid(spawner):
+def apply_training_uid_gid(spawner: Any) -> bool:
     """TACC-only: training instances run every user under uid/gid 100.
 
     Returns True if applied, so the caller can skip the normal TAS lookup.
@@ -281,7 +283,7 @@ def apply_training_uid_gid(spawner):
     return True
 
 
-def get_tenant_configs_for_user(spawner):
+def get_tenant_configs_for_user(spawner: Any) -> dict:
     """TACC-only: fetch tenant configs, respecting the restricted-allocation
     override. Other deployments always get the unrestricted configs."""
     if not IS_TACC:
@@ -289,7 +291,7 @@ def get_tenant_configs_for_user(spawner):
     return get_tenant_configs(restricted=is_user_restricted(spawner))
 
 
-async def get_notebook_options(spawner):
+async def get_notebook_options(spawner: Any) -> str | None:
     """Determine which images should be shown to the user to select."""
     spawner.tas_data = get_tas_user_projects(spawner)
     allowed = is_user_allowed(spawner)
@@ -304,7 +306,7 @@ async def get_notebook_options(spawner):
     spawner.user_configs = get_user_configs(spawner.user.name)
     spawner.log.info(f"spawner user configs: {spawner.user_configs}")
 
-    image_options = spawner.configs.get("images")
+    image_options = spawner.configs.get("images", [])
 
     if spawner.user_configs:
         for item in spawner.user_configs:
@@ -315,7 +317,7 @@ async def get_notebook_options(spawner):
                         if image not in image_options:
                             image_options += [image]
 
-    image_options = sorted(image_options, key=lambda d: d["name"])
+    image_options = sorted(image_options, key=lambda d: d["display_name"])
 
     if len(image_options) > 1:
         options = ""
@@ -337,12 +339,12 @@ async def get_notebook_options(spawner):
         return f"{select_images}{image_description}"
 
 
-async def parse_form_data(formdata, spawner):
+async def parse_form_data(formdata, spawner: Any) -> dict:
     spawner.log.info(f"FORM DATA: {formdata}")
     return formdata
 
 
-def get_tapis_access_data(spawner):
+def get_tapis_access_data(spawner: Any) -> None:
     """
     Returns the access token and base URL cached in the tapipy file
     """
@@ -361,6 +363,7 @@ def get_tapis_access_data(spawner):
 
     try:
         spawner.access_token = data[0]["token"]
+        decoded_data = {}
         try:
             decoded_data = jwt.decode(
                 data[0]["token"], options={"verify_signature": False}
@@ -404,7 +407,7 @@ def get_tapis_access_data(spawner):
         return None
 
 
-def get_tas_data(spawner):
+def get_tas_data(spawner: Any) -> None:
     """Get the TACC uid, gid and homedir for this user from the TAS API."""
     if not TAS_ROLE_ACCT:
         spawner.log.error("No TAS_ROLE_ACCT configured. Aborting.")
@@ -418,7 +421,7 @@ def get_tas_data(spawner):
         rsp = requests.get(
             url,
             headers=headers,
-            auth=requests.auth.HTTPBasicAuth(TAS_ROLE_ACCT, TAS_ROLE_PASS),
+            auth=HTTPBasicAuth(TAS_ROLE_ACCT, TAS_ROLE_PASS),
         )
     except Exception as e:
         spawner.log.error(
@@ -483,11 +486,11 @@ def get_tas_data(spawner):
     spawner.log.info(f"Setting the following TAS data: uid:{spawner.tas_uid} gid:{spawner.tas_gid}")
 
 
-def get_user_token_dir(username):
+def get_user_token_dir(username) -> str:
     return os.path.join("/tapis/jupyter/tokens", INSTANCE, TENANT, username)
 
 
-def get_mounts(spawner):
+def get_mounts(spawner: Any) -> None:
     safe_username = safe_string(spawner.user.name).lower()
     safe_tenant = safe_string(TENANT).lower()
     safe_instance = safe_string(INSTANCE).lower()
@@ -602,7 +605,7 @@ def get_mounts(spawner):
 
 # DesignSafe-only: project NFS mounts
 
-def get_ds_projects(spawner):
+def get_ds_projects(spawner: Any) -> None:
     """Mount DesignSafe projects from Corral."""
     if not IS_DESIGNSAFE:
         return
@@ -667,7 +670,7 @@ def get_ds_projects(spawner):
 
 # DesignSafe-only: license injection
 
-def get_licenses(spawner):
+def get_licenses(spawner: Any) -> None:
     """Fetch MATLAB and LSDYNA licenses."""
 
     # This line should be unnecessary
@@ -691,7 +694,7 @@ def get_licenses(spawner):
             spawner.log.warning(f"Exception fetching {license_type} license for {spawner.user.name}: {e}")
 
 
-def update_ds_env(spawner):
+def update_ds_env(spawner: Any) -> None:
     """DesignSafe Only: Update env to include mlm license file"""
     spawner.environment["MLM_LICENSE_FILE"] = spawner.configs.get("mlm_license_file", "")
 
