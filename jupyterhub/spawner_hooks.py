@@ -486,7 +486,7 @@ def get_tas_data(spawner: Any) -> None:
     spawner.log.info(f"Setting the following TAS data: uid:{spawner.tas_uid} gid:{spawner.tas_gid}")
 
 
-def get_user_token_dir(username) -> str:
+def get_user_token_dir(username: str) -> str:
     return os.path.join("/tapis/jupyter/tokens", INSTANCE, TENANT, username)
 
 
