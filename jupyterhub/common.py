@@ -7,7 +7,7 @@ import time
 
 import requests
 from tapipy.tapis import Tapis
-from tenacity import retry, retry_if_result, stop_after_attempt, wait_fixed
+from tenacity import retry, retry_if_result, stop_after_attempt, wait_fixed, RetryCallState
 
 logger = logging.getLogger("JupyterHub")
 
@@ -57,6 +57,8 @@ meta_base_url = os.environ.get("META_BASE_URL", "https://tacc.tapis.io")
 jupyter_home = deployment_defaults.get("JUPYTER_HOME", "/home/jovyan")
 database = os.environ.get("TAPIS_DATABASE")
 collection = os.environ.get("TAPIS_COLLECTION")
+retry_attemps = os.environ.get("RETRY_ATTEMPTS", 3)
+retry_wait = os.environ.get("RETRY_WAIT", 1)
 
 # Tenant specific environment cariables
 projects_url = os.environ.get("PROJECTS_URL", "https://designsafe-ci.org")
@@ -84,38 +86,39 @@ def get_config_metadata_name(restricted: bool) -> str:
     )
 
 
-def _return_none(retry_state) -> None:
+def _return_none(retry_state: RetryCallState) -> None:
     return None
 
 
-def _log_retry(retry_state) -> None:
+def _log_retry(retry_state: RetryCallState) -> None:
+    fn_name = retry_state.fn.__name__ if retry_state.fn else "some metadata call"
     logger.warning(
-        f"Retrying {retry_state.fn.__name__}, attempt {retry_state.attempt_number}"
+        f"Retrying {fn_name}, attempt {retry_state.attempt_number}"
     )
 
 
 @retry(
     retry=retry_if_result(lambda metadata: not metadata),
-    stop=stop_after_attempt(3),
-    wait=wait_fixed(1),
+    stop=stop_after_attempt(int(retry_attemps)),
+    wait=wait_fixed(int(retry_wait)),
     retry_error_callback=_return_none,
     before_sleep=_log_retry,
 )
-def get_tenant_configs(restricted:bool = False) -> dict:
+def get_tenant_configs(restricted: bool = False) -> dict:
     """Retrive tenant config from metadata"""
     t = Tapis(base_url=meta_base_url, jwt=tapis_service_token)
     q = {"name": get_config_metadata_name(restricted)}
     metadata = get_metadata(t, q)
     if not metadata:
         return {}
-    logger.error(f"Loaded tenant config: {metadata}")
+    logger.debug(f"Loaded tenant config: {metadata}")
     return metadata[0]["value"]
 
 
 @retry(
     retry=retry_if_result(lambda metadata: not metadata),
-    stop=stop_after_attempt(3),
-    wait=wait_fixed(1),
+    stop=stop_after_attempt(int(retry_attemps)),
+    wait=wait_fixed(int(retry_wait)),
     retry_error_callback=_return_none,
     before_sleep=_log_retry,
 )
@@ -123,7 +126,9 @@ def get_user_configs(username: str) -> dict | None:
     """Retrieve any groups user belongs to"""
     t = Tapis(base_url=meta_base_url, jwt=tapis_service_token)
     q = {"value.user": username, "value.tenant": TENANT, "value.instance": INSTANCE}
-    return get_metadata(t, q)
+    metadata = get_metadata(t, q)
+    logger.debug(f"Loaded user configs: {metadata}")
+    return metadata
 
 
 # Functions that manage the users access token
@@ -153,6 +158,7 @@ def refresh_access_token(refresh_token: str, username: str) -> dict | None:
         }
     except Exception as e:
         logger.error(f"Unable to refresh access token for {username}, error: {e}")
+        return None
 
 
 def get_user_token_dir(username: str) -> str:
@@ -189,7 +195,7 @@ def save_token(
                 "api_key": configs.get("tapis_client_id"),
                 "api_secret": configs.get("tapis_client_secret"),
                 "api_server": configs_base_url,
-                "verify": eval(oauth_validate_cert),
+                "verify": oauth_validate_cert,
             }
         ]
         with open(os.path.join(get_user_token_dir(username), ".tapipy"), "w") as f:
@@ -217,12 +223,12 @@ def save_token(
 
 # String utilities
 
-def safe_string(to_escape: str, safe=None, escape_char="-") -> str:
+def safe_string(to_escape: str, safe: set[str] = set(), escape_char: str = "-") -> str:
     """Escape a string so that it only contains characters in a safe set.
     Characters outside the safe list will be escaped with _%x_,
     where %x is the hex value of the character.
     """
-    if safe is None:
+    if not safe:
         safe = set(string.ascii_lowercase + string.digits)
     chars = []
     for c in to_escape:
