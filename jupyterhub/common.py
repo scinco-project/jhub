@@ -57,8 +57,8 @@ meta_base_url = os.environ.get("META_BASE_URL", "https://tacc.tapis.io")
 jupyter_home = deployment_defaults.get("JUPYTER_HOME", "/home/jovyan")
 database = os.environ.get("TAPIS_DATABASE")
 collection = os.environ.get("TAPIS_COLLECTION")
-retry_attemps = os.environ.get("RETRY_ATTEMPTS", 3)
-retry_wait = os.environ.get("RETRY_WAIT", 1)
+retry_attempts = int(os.environ.get("RETRY_ATTEMPTS", 3))
+retry_wait = int(os.environ.get("RETRY_WAIT", 1))
 
 # Tenant specific environment cariables
 projects_url = os.environ.get("PROJECTS_URL", "https://designsafe-ci.org")
@@ -99,8 +99,8 @@ def _log_retry(retry_state: RetryCallState) -> None:
 
 @retry(
     retry=retry_if_result(lambda metadata: not metadata),
-    stop=stop_after_attempt(int(retry_attemps)),
-    wait=wait_fixed(int(retry_wait)),
+    stop=stop_after_attempt(retry_attempts),
+    wait=wait_fixed(retry_wait),
     retry_error_callback=_return_none,
     before_sleep=_log_retry,
 )
@@ -117,8 +117,8 @@ def get_tenant_configs(restricted: bool = False) -> dict:
 
 @retry(
     retry=retry_if_result(lambda metadata: not metadata),
-    stop=stop_after_attempt(int(retry_attemps)),
-    wait=wait_fixed(int(retry_wait)),
+    stop=stop_after_attempt(retry_attempts),
+    wait=wait_fixed(retry_wait),
     retry_error_callback=_return_none,
     before_sleep=_log_retry,
 )
