@@ -47,7 +47,7 @@ LDAP_PASS = os.environ.get("LDAP_PASS")
 # shared spawner setup below. Names are resolved at call time via globals()
 # so tests can still patch these functions by name.
 DEPLOYMENT_HOOKS = {
-    "designsafe": ["is_user_allowed", "get_tapis_access_data", "get_tas_data", "get_all_configs", "set_selected_image", "set_cpu_mem_limits", "set_spawner_env", "update_ds_env", "get_mounts", "get_licenses", "get_ds_projects"],
+    "designsafe": ["check_user_restricted", "is_user_allowed", "get_tapis_access_data", "get_tas_data", "get_all_configs", "set_selected_image", "set_cpu_mem_limits", "set_spawner_env", "update_ds_env", "get_mounts", "get_licenses", "get_ds_projects"],
     "tacc": ["is_user_allowed", "apply_restricted_allocation", "get_tapis_access_data", "get_tas_data", "get_all_configs", "set_selected_image", "set_cpu_mem_limits", "set_spawner_env", "get_mounts"],
     "training": ["apply_training_uid_gid", "get_mounts"],
 }
@@ -120,6 +120,11 @@ def is_user_allowed(spawner: Any) -> None:
         raise web.HTTPError(403)
 
 
+def check_user_restricted(spawner: Any) -> None:
+    if is_user_restricted(spawner):
+        raise web.HTTPError(403)
+
+
 def is_user_restricted(spawner: Any) -> bool:
     """
     If the user is only in the restricted HETDEX project,
@@ -170,12 +175,6 @@ async def get_notebook_options(spawner: Any) -> str | None:
     """Determine which images should be shown to the user to select."""
     spawner.tas_data = get_tas_user_projects(spawner)
     is_user_allowed(spawner)
-
-    # Have to check somewhere for a restricted user trying to access
-    # a non-TACC JupyterHub instance
-    restricted = is_user_restricted(spawner)
-    if not IS_TACC and restricted:
-        raise web.HTTPError(403)
 
     spawner.configs = get_tenant_configs_for_user(spawner)
 
