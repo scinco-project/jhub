@@ -668,10 +668,10 @@ def set_spawner_env(spawner: Any) -> None:
     gid = str(spawner.gid)
 
     env = {
-        "MKL_NUM_THREADS": max(spawner.cpu_limits),
-        "NUMEXPR_NUM_THREADS": max(spawner.cpu_limits),
-        "OMP_NUM_THREADS": max(spawner.cpu_limits),
-        "OPENBLAS_NUM_THREADS": max(spawner.cpu_limits),
+        "MKL_NUM_THREADS": spawner.cpu_limit,
+        "NUMEXPR_NUM_THREADS": spawner.cpu_limit,
+        "OMP_NUM_THREADS": spawner.cpu_limit,
+        "OPENBLAS_NUM_THREADS": spawner.cpu_limit,
         "SCINCO_JUPYTERHUB_IMAGE": spawner.image,
         "HUB_USER": user,
         "HUB_UID": uid,
