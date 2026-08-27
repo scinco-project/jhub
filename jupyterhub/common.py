@@ -15,10 +15,6 @@ logger = logging.getLogger("JupyterHub")
 # Requires us to set this in our deployment yaml
 DEPLOYMENT_TARGET = os.environ.get("DEPLOYMENT_TARGET", "").lower()
 
-IS_TACC = DEPLOYMENT_TARGET == "tacc"
-IS_DESIGNSAFE = DEPLOYMENT_TARGET == "designsafe"
-IS_TRAINING = DEPLOYMENT_TARGET == "training"
-
 DEPLOYMENTS = {
     "tacc": {
         "RESTRICTED_ID": "66657",
