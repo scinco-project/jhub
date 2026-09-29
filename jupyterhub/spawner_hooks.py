@@ -15,9 +15,6 @@ from requests.auth import HTTPBasicAuth
 from .common import (
     DEPLOYMENT_TARGET,
     INSTANCE,
-    IS_DESIGNSAFE,
-    IS_TACC,
-    IS_TRAINING,
     RESTRICTED_ID,
     RESTRICTED_LABEL,
     TENANT,
@@ -49,7 +46,7 @@ LDAP_PASS = os.environ.get("LDAP_PASS")
 DEPLOYMENT_HOOKS = {
     "designsafe": ["check_user_restricted", "is_user_allowed", "get_tapis_access_data", "get_tas_data", "get_all_configs", "set_selected_image", "set_cpu_mem_limits", "set_spawner_env", "update_ds_env", "get_mounts", "get_licenses", "get_ds_projects"],
     "tacc": ["is_user_allowed", "apply_restricted_allocation", "get_tapis_access_data", "get_tas_data", "get_all_configs", "set_selected_image", "set_cpu_mem_limits", "set_spawner_env", "get_mounts"],
-    "training": ["apply_training_uid_gid", "get_mounts"],
+    "training": ["apply_training_uid_gid", "get_mounts"]
 }
 
 
@@ -87,6 +84,7 @@ def get_tas_user_projects(spawner: Any) -> dict:
     """
     Retrieve user projects from TAS
     """
+    # TODO -- update this to use POSIX
     try:
         user = spawner.user.name
         http_headers = urllib3.make_headers(basic_auth=f"{TAS_ROLE_ACCT}:{TAS_ROLE_PASS}")
@@ -135,7 +133,7 @@ def is_user_restricted(spawner: Any) -> bool:
     results = spawner.tas_data.get("result", [])
     if results and len(results) == 1:
         item_id = results[0].get("id")
-        if item_id is not None and str(item_id) == RESTRICTED_ID and IS_TACC:
+        if item_id is not None and str(item_id) == RESTRICTED_ID and DEPLOYMENT_TARGET == "tacc":
             spawner.log.info(f"Found restricted project for user: {user}")
             spawner.extra_labels = {"restrictedProject": RESTRICTED_LABEL}
             return True
@@ -149,6 +147,7 @@ def apply_restricted_allocation(spawner: Any) -> None:
     Will also check for DS and raise 403, because we don't support a restricted
     DesignSafe JupyterHub, so restricted accounts should be booted.
     """
+    # TODO -- use spawner.extra_labels to check for restricted project
     restricted = is_user_restricted(spawner)
     spawner.log.info(f"Restricted? {restricted}")
 
@@ -291,6 +290,7 @@ def get_tapis_access_data(spawner: Any) -> None:
 
 def get_tas_data(spawner: Any) -> None:
     """Get the TACC uid, gid and homedir for this user from the TAS API."""
+    # TODO -- change to use POSIX
     if not TAS_ROLE_ACCT:
         spawner.log.error("No TAS_ROLE_ACCT configured. Aborting.")
         return
@@ -330,6 +330,7 @@ def get_tas_data(spawner: Any) -> None:
         )
         return
 
+    # TODO -- change this to be its own hook
     gids = []
 
     try:
