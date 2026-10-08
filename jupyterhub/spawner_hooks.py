@@ -102,25 +102,30 @@ def merge_configs(x: dict, y: dict) -> dict:
     return merged
 
 
-def retrieve_full_ldap_account(spawner: Any) -> None:
-    tls = Tls(sni="ldap.tacc.utexas.edu", ciphers="DEFAULT@SECLEVEL=1")
-    server = Server("ldaps://ldap.tacc.utexas.edu:636", tls=tls, use_ssl=True)
-    conn = Connection(
-        server,
-        "uid=ldapbind,ou=People,dc=tacc,dc=utexas,dc=edu",
-        LDAP_PASS,
-        client_strategy=SAFE_SYNC,
-        use_referral_cache=False,
-        auto_bind=True,
-    )
-    status, result, response, _ = conn.search(
-        search_base='ou=People,dc=tacc,dc=utexas,dc=edu',
-        search_filter=f'(uid={spawner.user.name})',
-        attributes=['cn', 'uid', 'gidNumber', 'uidNumber', 'mail', 'givenName', 'destinationIndicator','loginShell',
-                'sn', 'host', 'authorizedService', 'objectClass', 'eduPersonPrincipalName']
-    )
-    if not response:
-        return None
+def search_ldap(spawner: Any, base: str, filter: str, attributes: list[str] | None = None) -> list:
+    response = []
+    try:
+        tls = Tls(sni="ldap.tacc.utexas.edu", ciphers="DEFAULT@SECLEVEL=1")
+        server = Server("ldaps://ldap.tacc.utexas.edu:636", tls=tls, use_ssl=True)
+        conn = Connection(
+            server,
+            "uid=ldapbind,ou=People,dc=tacc,dc=utexas,dc=edu",
+            LDAP_PASS,
+            client_strategy=SAFE_SYNC,
+            use_referral_cache=False,
+            auto_bind=True,
+        )
+        _, _, response, _ = conn.search(
+            search_base=base,
+            search_filter=filter,
+            attributes=attributes,
+        )
+    except Exception as e:
+        spawner.log.error(f"Error searching ldap. rsp: {e}")
+    return response
+
+
+def calculate_account(response: list[dict]) -> dict:
     ldap_account = {}
     for k, v in response[0]["attributes"].items():
         if not isinstance(v, list):
@@ -131,6 +136,19 @@ def retrieve_full_ldap_account(spawner: Any) -> None:
             ldap_account[k] = v
         else:
             ldap_account[k] = None
+    return ldap_account
+
+def retrieve_full_ldap_account(spawner: Any) -> None:
+    response = search_ldap(
+        spawner=spawner,
+        base='ou=People,dc=tacc,dc=utexas,dc=edu',
+        filter=f'(uid={spawner.user.name})',
+        attributes=['cn', 'uid', 'gidNumber', 'uidNumber', 'mail', 'givenName', 'destinationIndicator','loginShell',
+                'sn', 'host', 'authorizedService', 'objectClass', 'eduPersonPrincipalName']
+    )
+    if not response:
+        return None
+    ldap_account = calculate_account(response)
     spawner.ldap_account = ldap_account
 
 
@@ -140,18 +158,10 @@ def get_user_ldap_groups(spawner: Any) -> list:
     """
     ldap_groups = []
     try:
-        tls = Tls(sni="ldap.tacc.utexas.edu", ciphers="DEFAULT@SECLEVEL=1")
-        server = Server("ldaps://ldap.tacc.utexas.edu:636", tls=tls, use_ssl=True)
-        conn = Connection(
-            server,
-            "uid=ldapbind,ou=People,dc=tacc,dc=utexas,dc=edu",
-            LDAP_PASS,
-            client_strategy=SAFE_SYNC,
-            auto_bind=True,
-        )
-        status, result, response, _ = conn.search(
-            "ou=Groups,dc=tacc,dc=utexas,dc=edu",
-            f"(uniqueMember=uid={spawner.user.name},ou=People,dc=tacc,dc=utexas,dc=edu)",
+        response = search_ldap(
+            spawner=spawner,
+            base="ou=Groups,dc=tacc,dc=utexas,dc=edu",
+            filter=f"(uniqueMember=uid={spawner.user.name},ou=People,dc=tacc,dc=utexas,dc=edu)",
         )
         spawner.log.info(response)
         for entry in response:
@@ -171,7 +181,7 @@ def is_user_allowed(spawner: Any) -> None:
     """
     user = spawner.user.name
     spawner.log.info(f"Check if user has any allocation: {user}")
-    allowed = True if len(spawner.ldap_groups) > 0 else False
+    allowed = len(spawner.ldap_groups) > 0
     if not allowed:
         spawner.log.error(f"UNAUTHORIZED USER: {spawner.user.name} ATTEMPTING TO ACCESS JUPYTERHUB")
         raise web.HTTPError(403)
@@ -357,7 +367,7 @@ def get_ldap_data(spawner: Any) -> None:
         spawner.ldap_uid = spawner.ldap_account['uidNumber']
         spawner.ldap_gid = spawner.ldap_account['gidNumber']
         spawner.init_gid = spawner.ldap_account['gidNumber']
-        spawner.tas_homedir = f"{spawner.ldap_account['destinationIndicator']}/{spawner.user.name}"
+        spawner.homedir = f"{spawner.ldap_account['destinationIndicator']}/{spawner.user.name}"
     except Exception as e:
         spawner.log.error(
             f"Error setting spawner ldap attributes: {e}"
@@ -376,15 +386,21 @@ def get_ldap_data(spawner: Any) -> None:
     spawner.gid = int(spawner.ldap_gid)
 
 
-def set_supplemental_gids(spawner: Any) -> None:
+def get_gids_from_groups(ldap_groups: list) -> list:
     """Derive the user's supplemental gids from their LDAP group membership."""
     gids = []
-    for raw_dn in spawner.ldap_groups:
+    for raw_dn in ldap_groups:
         group = raw_dn.split(",")[0].split("=")[-1]
         try:
             gids.append(int(group.split("-")[1]))
         except (IndexError, ValueError):
             continue
+
+    return gids
+
+def set_supplemental_gids(spawner: Any) -> None:
+    """Set supplemental GIDS extracted from group DN's"""
+    gids = get_gids_from_groups(spawner.ldap_groups)
 
     if gids:
         spawner.supplemental_gids = gids
