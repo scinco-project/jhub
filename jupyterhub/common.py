@@ -17,7 +17,7 @@ DEPLOYMENT_TARGET = os.environ.get("DEPLOYMENT_TARGET", "").lower()
 
 DEPLOYMENTS = {
     "tacc": {
-        "RESTRICTED_ID": "66657",
+        "RESTRICTED_ID": "G-827652",
         "RESTRICTED_LABEL": "hetdex",
         "PORTALS_BASE_URL": "https://portals.tapis.io",
         "TAPIS_BASE_URL": "https://tacc.tapis.io",
@@ -112,7 +112,7 @@ def get_tenant_configs(restricted: bool = False) -> dict:
 
 
 @retry(
-    retry=retry_if_result(lambda metadata: not metadata),
+    retry=retry_if_result(lambda metadata: metadata is None),
     stop=stop_after_attempt(retry_attempts),
     wait=wait_fixed(retry_wait),
     retry_error_callback=_return_none,

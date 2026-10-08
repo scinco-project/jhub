@@ -29,7 +29,7 @@ from .common import (
     tapis_service_token
 )
 
-from ldap3 import SAFE_SYNC, Connection, Server
+from ldap3 import SAFE_SYNC, Connection, Server, Tls
 from tornado import web
 
 # TAS configuration:
@@ -44,16 +44,38 @@ LDAP_PASS = os.environ.get("LDAP_PASS")
 # shared spawner setup below. Names are resolved at call time via globals()
 # so tests can still patch these functions by name.
 DEPLOYMENT_HOOKS = {
-    "designsafe": ["check_user_restricted", "is_user_allowed", "get_tapis_access_data", "get_tas_data", "get_all_configs", "set_selected_image", "set_cpu_mem_limits", "set_spawner_env", "update_ds_env", "get_mounts", "get_licenses", "get_ds_projects"],
-    "tacc": ["is_user_allowed", "apply_restricted_allocation", "get_tapis_access_data", "get_tas_data", "get_all_configs", "set_selected_image", "set_cpu_mem_limits", "set_spawner_env", "get_mounts"],
+    "designsafe": ["retrieve_full_ldap_account", "check_user_restricted", "is_user_allowed", "get_tapis_access_data", "get_ldap_data", "set_supplemental_gids", "get_all_configs", "set_selected_image", "set_cpu_mem_limits", "set_spawner_env", "update_ds_env", "get_mounts", "get_licenses", "get_ds_projects"],
+    "tacc": ["retrieve_full_ldap_account", "is_user_allowed", "apply_restricted_allocation", "get_tapis_access_data", "get_ldap_data", "set_supplemental_gids", "get_all_configs", "set_selected_image", "set_cpu_mem_limits", "set_spawner_env", "get_mounts"],
     "training": ["apply_training_uid_gid", "get_mounts"]
 }
+
+
+class _UserPrefixedLogger:
+    """Wraps a spawner's logger to prefix every message with the username.
+
+    Spawns run concurrently across threads and all log to the same handler,
+    so interleaved lines are otherwise impossible to attribute to a user.
+    """
+
+    def __init__(self, logger: Any, username: str) -> None:
+        self._logger = logger
+        self._username = username
+
+    def __getattr__(self, name: str) -> Any:
+        method = getattr(self._logger, name)
+
+        def wrapper(msg: Any, *args: Any, **kwargs: Any) -> Any:
+            return method(f"[{self._username}] {msg}", *args, **kwargs)
+
+        return wrapper
 
 
 # Main configuration hook for the KubeSpawner
 
 def hook(spawner: Any) -> None:
     """Sets up the user's notebook server."""
+    if not isinstance(spawner.log, _UserPrefixedLogger):
+        spawner.log = _UserPrefixedLogger(spawner.log, spawner.user.name)
     spawner.log.info("In main hook function")
     spawner.start_timeout = 60 * 5
     spawner.log.info(f"👻 tenant configs 👻 {spawner.configs}")
@@ -80,39 +102,86 @@ def merge_configs(x: dict, y: dict) -> dict:
     return merged
 
 
-def get_tas_user_projects(spawner: Any) -> dict:
-    """
-    Retrieve user projects from TAS
-    """
-    # TODO -- update this to use POSIX
+def search_ldap(spawner: Any, base: str, filter: str, attributes: list[str] | None = None) -> list:
+    response = []
     try:
-        user = spawner.user.name
-        http_headers = urllib3.make_headers(basic_auth=f"{TAS_ROLE_ACCT}:{TAS_ROLE_PASS}")
-        pool_manager = urllib3.PoolManager(
-            cert_reqs="CERT_REQUIRED",
-            ca_certs=certifi.where(),
-            retries=False,
-            headers=http_headers,
+        tls = Tls(sni="ldap.tacc.utexas.edu", ciphers="DEFAULT@SECLEVEL=1")
+        server = Server("ldaps://ldap.tacc.utexas.edu:636", tls=tls, use_ssl=True)
+        conn = Connection(
+            server,
+            "uid=ldapbind,ou=People,dc=tacc,dc=utexas,dc=edu",
+            LDAP_PASS,
+            client_strategy=SAFE_SYNC,
+            use_referral_cache=False,
+            auto_bind=True,
         )
-        response = pool_manager.request("GET", f"{TAS_URL_BASE}/projects/username/{user}")
-        spawner.log.info(f"{TAS_URL_BASE}/projects/username/{user}")
-        json_response = json.loads(response.data.decode("utf-8"))
-        spawner.log.info(f"TAS Projects for {user}: {json_response}")
-        return json_response
-    except Exception:
-        return {}
+        _, _, response, _ = conn.search(
+            search_base=base,
+            search_filter=filter,
+            attributes=attributes,
+        )
+    except Exception as e:
+        spawner.log.error(f"Error searching ldap. rsp: {e}")
+    return response
+
+
+def calculate_account(response: list[dict]) -> dict:
+    ldap_account = {}
+    for k, v in response[0]["attributes"].items():
+        if not isinstance(v, list):
+            ldap_account[k] = v
+        elif len(v) == 1:
+            ldap_account[k] = v[0]
+        elif len(v) > 1:
+            ldap_account[k] = v
+        else:
+            ldap_account[k] = None
+    return ldap_account
+
+def retrieve_full_ldap_account(spawner: Any) -> None:
+    response = search_ldap(
+        spawner=spawner,
+        base='ou=People,dc=tacc,dc=utexas,dc=edu',
+        filter=f'(uid={spawner.user.name})',
+        attributes=['cn', 'uid', 'gidNumber', 'uidNumber', 'mail', 'givenName', 'destinationIndicator','loginShell',
+                'sn', 'host', 'authorizedService', 'objectClass', 'eduPersonPrincipalName']
+    )
+    if not response:
+        return None
+    ldap_account = calculate_account(response)
+    spawner.ldap_account = ldap_account
+
+
+def get_user_ldap_groups(spawner: Any) -> list:
+    """
+    Retrieve user data from LDAP
+    """
+    ldap_groups = []
+    try:
+        response = search_ldap(
+            spawner=spawner,
+            base="ou=Groups,dc=tacc,dc=utexas,dc=edu",
+            filter=f"(uniqueMember=uid={spawner.user.name},ou=People,dc=tacc,dc=utexas,dc=edu)",
+        )
+        spawner.log.info(response)
+        for entry in response:
+            ldap_groups.append(entry['dn'])
+    except Exception as e:
+        spawner.log.error(f"Did not get data from ldap. rsp: {e}")
+
+    return ldap_groups
 
 
 def is_user_allowed(spawner: Any) -> None:
     """
     A user is allowed if they have any allocation.
     
-    Check response from TAS to check for any allocation
+    Check response from LDAP to check for any allocation
     Should already have been caught, but double checking doesn't hurt
     """
     user = spawner.user.name
     spawner.log.info(f"Check if user has any allocation: {user}")
-    allowed = bool(spawner.tas_data.get("result"))
+    allowed = len(spawner.ldap_groups) > 0
     if not allowed:
         spawner.log.error(f"UNAUTHORIZED USER: {spawner.user.name} ATTEMPTING TO ACCESS JUPYTERHUB")
         raise web.HTTPError(403)
@@ -129,10 +198,12 @@ def is_user_restricted(spawner: Any) -> bool:
     they are given the restricted user configs.
     """
     user = spawner.user.name
-    spawner.log.info(f"Check tas for restricted project for user: {user}")
-    results = spawner.tas_data.get("result", [])
+    spawner.log.info(f"Check ldap for restricted project for user: {user}")
+    results = spawner.ldap_groups
     if results and len(results) == 1:
-        item_id = results[0].get("id")
+        pieces = results[0].split(',')
+        split_piece = pieces[0].split('=')
+        item_id = split_piece[-1]
         if item_id is not None and str(item_id) == RESTRICTED_ID and DEPLOYMENT_TARGET == "tacc":
             spawner.log.info(f"Found restricted project for user: {user}")
             spawner.extra_labels = {"restrictedProject": RESTRICTED_LABEL}
@@ -172,7 +243,8 @@ def get_tenant_configs_for_user(spawner: Any) -> dict:
 
 async def get_notebook_options(spawner: Any) -> str | None:
     """Determine which images should be shown to the user to select."""
-    spawner.tas_data = get_tas_user_projects(spawner)
+    # spawner.tas_data = get_tas_user_projects(spawner)
+    spawner.ldap_groups = get_user_ldap_groups(spawner)
     is_user_allowed(spawner)
 
     spawner.configs = get_tenant_configs_for_user(spawner)
@@ -288,90 +360,50 @@ def get_tapis_access_data(spawner: Any) -> None:
         return None
 
 
-def get_tas_data(spawner: Any) -> None:
-    """Get the TACC uid, gid and homedir for this user from the TAS API."""
-    # TODO -- change to use POSIX
-    if not TAS_ROLE_ACCT:
-        spawner.log.error("No TAS_ROLE_ACCT configured. Aborting.")
-        return
-    if not TAS_ROLE_PASS:
-        spawner.log.error("No TAS_ROLE_PASS configured. Aborting.")
-        return
-    url = f"{TAS_URL_BASE}/users/username/{spawner.user.name}"
-    headers = {"Content-type": "application/json", "Accept": "application/json"}
+def get_ldap_data(spawner: Any) -> None:
+    """Get the TACC uid, gid and homedir for this user from the LDAP user obejct."""
+    spawner.ldap_gid = None
     try:
-        rsp = requests.get(
-            url,
-            headers=headers,
-            auth=HTTPBasicAuth(TAS_ROLE_ACCT, TAS_ROLE_PASS),
-        )
+        spawner.ldap_uid = spawner.ldap_account['uidNumber']
+        spawner.ldap_gid = spawner.ldap_account['gidNumber']
+        spawner.init_gid = spawner.ldap_account['gidNumber']
+        spawner.homedir = f"{spawner.ldap_account['destinationIndicator']}/{spawner.user.name}"
     except Exception as e:
         spawner.log.error(
-            f"Got an exception from TAS API. Exception: {e}. url: {url}. TAS_ROLE_ACCT: {TAS_ROLE_ACCT}"
+            f"Error setting spawner ldap attributes: {e}"
         )
         return
-    try:
-        data = rsp.json()
-        spawner.log.info("TAS DATA: %s", data)
-    except Exception as e:
-        spawner.log.error(
-            f"Did not get JSON from TAS API. rsp: {rsp} Exception: {e}. url: {url}. TAS_ROLE_ACCT: {TAS_ROLE_ACCT}"
-        )
-        return
-    spawner.tas_gid = None
-    try:
-        spawner.tas_uid = data["result"]["uid"]
-        spawner.tas_gid = data["result"]["gid"]
-        spawner.init_gid = data["result"]["gid"]
-        spawner.tas_homedir = data["result"]["homeDirectory"]
-    except Exception as e:
-        spawner.log.error(
-            f"Did not get attributes from TAS API. rsp: {rsp} Exception: {e}. url: {url}. TAS_ROLE_ACCT: {TAS_ROLE_ACCT}"
-        )
-        return
-
-    # TODO -- change this to be its own hook
-    gids = []
-
-    try:
-        server = Server("ldaps://ldap.tacc.utexas.edu:636")
-        conn = Connection(
-            server,
-            "uid=ldapbind,ou=People,dc=tacc,dc=utexas,dc=edu",
-            LDAP_PASS,
-            client_strategy=SAFE_SYNC,
-            auto_bind=True,
-        )
-        status, result, response, _ = conn.search(
-            "ou=Groups,dc=tacc,dc=utexas,dc=edu",
-            f"(uniqueMember=uid={spawner.user.name},ou=People,dc=tacc,dc=utexas,dc=edu)",
-        )
-        for entry in response:
-            data = entry["dn"].split(",")
-            cn = data[0].split("=")
-            group = cn[1]
-            temp_gid = group.split("-")[1]
-            try:
-                gid = int(temp_gid)
-                gids.append(gid)
-            except Exception:
-                continue
-    except Exception as e:
-        spawner.log.error(f"Did not get gid's from ldap. rsp: {e}")
-
-    if gids:
-        spawner.supplemental_gids = gids
 
     # if the instance has a configured TAS_GID to use we will use that; otherwise,
     # we fall back on using the user's uid as the gid, which is (almost) always safe)
-    if not spawner.tas_gid:
-        spawner.tas_gid = spawner.configs.get("gid", spawner.tas_uid)
-    spawner.log.info(f"Setting the following TAS data: uid:{spawner.tas_uid} gid:{spawner.tas_gid}")
+    if not spawner.ldap_gid:
+        spawner.ldap_gid = spawner.configs.get("gid", spawner.ldap_uid)
+    spawner.log.info(f"Setting the following LDAP data: uid:{spawner.ldap_uid} gid:{spawner.ldap_gid}")
 
-    if not spawner.tas_uid or not spawner.tas_gid:
+    if not spawner.ldap_uid or not spawner.ldap_gid:
         raise web.HTTPError(403)
-    spawner.uid = int(spawner.tas_uid)
-    spawner.gid = int(spawner.tas_gid)
+    spawner.uid = int(spawner.ldap_uid)
+    spawner.gid = int(spawner.ldap_gid)
+
+
+def get_gids_from_groups(ldap_groups: list) -> list:
+    """Derive the user's supplemental gids from their LDAP group membership."""
+    gids = []
+    for raw_dn in ldap_groups:
+        group = raw_dn.split(",")[0].split("=")[-1]
+        try:
+            gids.append(int(group.split("-")[1]))
+        except (IndexError, ValueError):
+            continue
+
+    return gids
+
+def set_supplemental_gids(spawner: Any) -> None:
+    """Set supplemental GIDS extracted from group DN's"""
+    gids = get_gids_from_groups(spawner.ldap_groups)
+
+    if gids:
+        spawner.supplemental_gids = gids
 
 
 def get_user_token_dir(username: str) -> str:
@@ -583,20 +615,21 @@ def get_all_configs(spawner: Any) -> None:
     spawner.extra_resource_guarantees = spawner.configs.get("extra_resource_guarantees", {})
     spawner.extra_resource_limits = spawner.configs.get("extra_resource_limits", {})
 
-    for user_conf in spawner.user_configs:
-        conf_value = user_conf.get("value", user_conf)
-        if "extra_pod_config" in conf_value:
-            spawner.extra_pod_config = merge_configs(
-                conf_value["extra_pod_config"], spawner.extra_pod_config
-            )
-        if "extra_resource_guarantees" in conf_value:
-            spawner.extra_resource_guarantees = merge_configs(
-                conf_value["extra_resource_guarantees"], spawner.extra_resource_guarantees
-            )
-        if "extra_resource_limits" in conf_value:
-            spawner.extra_resource_limits = merge_configs(
-                conf_value["extra_resource_limits"], spawner.extra_resource_limits
-            )
+    if len(spawner.user_configs) > 0:
+        for user_conf in spawner.user_configs:
+            conf_value = user_conf.get("value", user_conf)
+            if "extra_pod_config" in conf_value:
+                spawner.extra_pod_config = merge_configs(
+                    conf_value["extra_pod_config"], spawner.extra_pod_config
+                )
+            if "extra_resource_guarantees" in conf_value:
+                spawner.extra_resource_guarantees = merge_configs(
+                    conf_value["extra_resource_guarantees"], spawner.extra_resource_guarantees
+                )
+            if "extra_resource_limits" in conf_value:
+                spawner.extra_resource_limits = merge_configs(
+                    conf_value["extra_resource_limits"], spawner.extra_resource_limits
+                )
 
 
 def set_cpu_mem_limits(spawner: Any) -> None:
@@ -613,7 +646,7 @@ def set_cpu_mem_limits(spawner: Any) -> None:
             cpu_limits.append(cpu_limit)
     spawner.log.info(f"available limits -- mem: {mem_limits} cpu:{cpu_limits}")
     spawner.mem_limit = max(mem_limits, key=lambda k: mem_limits[k])
-    spawner.cpu_limit = float(max(cpu_limits))
+    spawner.cpu_limit = float(max(cpu_limits, key=float))
     # Set the guarantees really low because when None or 0,
     # it sets a resource request for an amount equal to the limit
     spawner.mem_guarantee = ".001K"
@@ -668,11 +701,13 @@ def set_spawner_env(spawner: Any) -> None:
     uid = str(spawner.uid)
     gid = str(spawner.gid)
 
+    cpu_limit = str(spawner.cpu_limit)
+
     env = {
-        "MKL_NUM_THREADS": spawner.cpu_limit,
-        "NUMEXPR_NUM_THREADS": spawner.cpu_limit,
-        "OMP_NUM_THREADS": spawner.cpu_limit,
-        "OPENBLAS_NUM_THREADS": spawner.cpu_limit,
+        "MKL_NUM_THREADS": cpu_limit,
+        "NUMEXPR_NUM_THREADS": cpu_limit,
+        "OMP_NUM_THREADS": cpu_limit,
+        "OPENBLAS_NUM_THREADS": cpu_limit,
         "SCINCO_JUPYTERHUB_IMAGE": spawner.image,
         "HUB_USER": user,
         "HUB_UID": uid,

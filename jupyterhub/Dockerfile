@@ -11,6 +11,7 @@ RUN pip install --upgrade pip
 RUN pip install tapipy --ignore-installed certifi 
 RUN pip install ldap3
 RUN pip install jupyter-collaboration
+RUN pip install tenacity
 
 
 # COPY requirements.txt /home/requirements.txt
