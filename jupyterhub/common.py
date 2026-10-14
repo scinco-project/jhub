@@ -17,8 +17,6 @@ DEPLOYMENT_TARGET = os.environ.get("DEPLOYMENT_TARGET", "").lower()
 
 DEPLOYMENTS = {
     "tacc": {
-        "RESTRICTED_ID": "G-827652",
-        "RESTRICTED_LABEL": "hetdex",
         "PORTALS_BASE_URL": "https://portals.tapis.io",
         "TAPIS_BASE_URL": "https://tacc.tapis.io",
         "JUPYTER_HOME": "/home/jovyan",
@@ -40,8 +38,8 @@ def _require_env(name: str) -> str:
 INSTANCE = _require_env("INSTANCE")
 TENANT = _require_env("TENANT")
 tapis_service_token = _require_env("TAPIS_SERVICE_TOKEN")
-RESTRICTED_ID = os.environ.get("RESTRICTED_ID", deployment_defaults.get("RESTRICTED_ID", ""))
-RESTRICTED_LABEL = os.environ.get("RESTRICTED_LABEL", deployment_defaults.get("RESTRICTED_LABEL", ""))
+RESTRICTED_ID = os.environ.get("RESTRICTED_ID", "G-827652")
+RESTRICTED_LABEL = os.environ.get("RESTRICTED_LABEL", "hetdex")
 portals_service_token = os.environ.get("PORTALS_SERVICE_TOKEN")
 portals_base_url = os.environ.get(
     "PORTALS_BASE_URL", deployment_defaults.get("PORTALS_BASE_URL", "https://portals.tapis.io")

@@ -138,6 +138,7 @@ def calculate_account(response: list[dict]) -> dict:
             ldap_account[k] = None
     return ldap_account
 
+
 def retrieve_full_ldap_account(spawner: Any) -> None:
     response = search_ldap(
         spawner=spawner,
@@ -181,9 +182,11 @@ def is_user_allowed(spawner: Any) -> None:
     """
     user = spawner.user.name
     spawner.log.info(f"Check if user has any allocation: {user}")
-    allowed = len(spawner.ldap_groups) > 0
-    if not allowed:
+    if not len(spawner.ldap_groups) > 0:
         spawner.log.error(f"UNAUTHORIZED USER: {spawner.user.name} ATTEMPTING TO ACCESS JUPYTERHUB")
+        raise web.HTTPError(403)
+    if is_user_restricted(spawner) and DEPLOYMENT_TARGET == 'designsafe':
+        spawner.log.error(f"RESTRICTED USER: {spawner.user.name} ATTEMPTING TO ACCESS DS JUPYTERHUB")
         raise web.HTTPError(403)
 
 
@@ -204,7 +207,7 @@ def is_user_restricted(spawner: Any) -> bool:
         pieces = results[0].split(',')
         split_piece = pieces[0].split('=')
         item_id = split_piece[-1]
-        if item_id is not None and str(item_id) == RESTRICTED_ID and DEPLOYMENT_TARGET == "tacc":
+        if item_id is not None and str(item_id) == RESTRICTED_ID:
             spawner.log.info(f"Found restricted project for user: {user}")
             spawner.extra_labels = {"restrictedProject": RESTRICTED_LABEL}
             return True
@@ -494,8 +497,10 @@ def get_mounts(spawner: Any) -> None:
         "tenant_id": TENANT,
     }
 
-    if hasattr(spawner, "tas_homedir"):
-        template_vars["tas_homedir"] = spawner.tas_homedir
+    if hasattr(spawner, "homedir"):
+        template_vars["homedir"] = spawner.homedir
+
+    symlink_commands = []
 
     if len(volume_mounts):
         for item in volume_mounts:
@@ -519,8 +524,24 @@ def get_mounts(spawner: Any) -> None:
             spawner.volume_mounts.append(
                 {"mountPath": item["mountPath"], "name": vol_name}
             )
+
+            for extra in item.get("extra_mounts", []):
+                spawner.volume_mounts.append({"name": vol_name, **extra})
+
+            for link in item.get("symlinks", []):
+                target = f"{item['mountPath']}/{link['target']}"
+                link_path = link["link"]
+                symlink_commands.append(f'ln -sfn "{target}" "{link_path}"')
+
         spawner.log.info(f"volumes: {spawner.volumes}")
         spawner.log.info(f"volume_mounts: {spawner.volume_mounts}")
+
+    if symlink_commands:
+        spawner.lifecycle_hooks = {
+            "postStart": {
+                "exec": {"command": ["/bin/sh", "-c", " && ".join(symlink_commands)]}
+            }
+        }
 
 
 def get_ds_projects(spawner: Any) -> None:
