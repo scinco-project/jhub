@@ -228,7 +228,7 @@ def apply_restricted_allocation(spawner: Any) -> None:
     if restricted:
         spawner.configs = get_tenant_configs(restricted)
         spawner.log.info(f"spawner configs: {spawner.configs}")
-        spawner.user_configs = get_user_configs(spawner.user.name)
+        spawner.user_configs = get_user_configs(spawner.user.name) or []
         spawner.log.info(f"spawner user configs: {spawner.user_configs}")
 
 
@@ -253,7 +253,7 @@ async def get_notebook_options(spawner: Any) -> str | None:
     spawner.configs = get_tenant_configs_for_user(spawner)
 
     spawner.log.info(f"spawner configs: {spawner.configs}")
-    spawner.user_configs = get_user_configs(spawner.user.name)
+    spawner.user_configs = get_user_configs(spawner.user.name) or []
     spawner.log.info(f"spawner user configs: {spawner.user_configs}")
 
     image_options = spawner.configs.get("images", [])
@@ -285,7 +285,11 @@ async def get_notebook_options(spawner: Any) -> str | None:
         })()"""
 
         image_description = '<p id="image_description" style="display: inline-block"> </p>'
-        select_images = f'<select id="image" name="image" size="10" onchange="{js}"> {options} </select>'
+        select_size = min(len(image_options), 10)
+        select_images = (
+            f'<select id="image" name="image" size="{select_size}" class="form-select" '
+            f'style="width: 24rem; max-width: 100%; font-size: 1.25rem;" onchange="{js}"> {options} </select>'
+        )
         return f"{select_images}{image_description}"
     else:
         return None
@@ -679,18 +683,21 @@ def set_selected_image(spawner: Any) -> None:
     if len(spawner.configs.get("images")) == 1:
         spawner.image = spawner.configs.get("images")[0]["name"]
     else:
-        image_options = spawner.configs.get("images")
+        image_options = list(spawner.configs.get("images"))
         spawner.log.info(f"Verifiying image: {image_options}")
         user_configs = spawner.user_configs
         spawner.log.info(f"User configs: {user_configs}")
         for item in spawner.user_configs:
             spawner.log.info(f"Item: {item}")
-            for image in item["value"]["images"]:
+            for image in item.get("value", {}).get("images") or []:
                 spawner.log.info(f"Image: {image}")
                 image_options.append(image)
         user_options = spawner.user_options
         spawner.log.info(f"User options: {user_options}")
-        image = ast.literal_eval(spawner.user_options["image"][0])
+        try:
+            image = json.loads(spawner.user_options["image"][0])
+        except ValueError:
+            image = ast.literal_eval(spawner.user_options["image"][0])
         spawner.log.info(f"Image: {image}")
 
         try:

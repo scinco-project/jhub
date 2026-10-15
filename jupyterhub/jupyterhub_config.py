@@ -433,7 +433,7 @@ c.JupyterHub.spawner_class = "kubespawner.KubeSpawner"
 # c.JupyterHub.subdomain_host = ''
 
 # Paths to search for jinja templates, before using the default templates.
-c.JupyterHub.template_paths = ["/usr/local/share/jupyterhub/templates/custom_templates"]
+c.JupyterHub.template_paths = ["/srv/jupyterhub/custom_templates"]
 
 # Extra variables to be passed into jinja templates
 # c.JupyterHub.template_vars = {}

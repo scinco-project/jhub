@@ -1,0 +1,39 @@
+# Image: taccsciapps/jupyterhub:2.0
+
+FROM jupyterhub/jupyterhub:6.0.1
+
+RUN apt-get update
+RUN apt-get install -y build-essential curl chromium-browser unzip vim git
+
+# Pull the prebuilt uv binary instead of installing it through pip/curl
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+# VIRTUAL_ENV=/srv/venv is already set by the base image, so uv installs
+# into it automatically -- no --system flag (that would target the
+# externally-managed base /usr Python instead and fail).
+RUN uv pip install oauthenticator jupyterhub-kubespawner==4.3.0 notebook ipdb humanfriendly kubernetes==28.1.0 selenium webdriver-manager
+RUN uv pip install "pyjwt[crypto]"
+RUN uv pip install --reinstall tapipy certifi
+RUN uv pip install ldap3
+RUN uv pip install jupyter-collaboration
+RUN uv pip install tenacity
+
+
+# COPY requirements.txt /home/requirements.txt
+# RUN uv pip install -r /home/requirements.txt
+
+# JupyterHub 6.0.1 installs into a venv at /srv/venv (python 3.14) instead of
+# the system dist-packages used by the old 3.0.0 image.
+ADD tapis.py /srv/venv/lib/python3.14/site-packages/oauthenticator/tapis.py
+ADD common.py /srv/venv/lib/python3.14/site-packages/jupyterhub/common.py
+ADD selenium/ /srv/jupyterhub/selenium
+ADD spawner_hooks.py /srv/venv/lib/python3.14/site-packages/jupyterhub/spawner_hooks.py
+ADD jupyterhub_config.py /srv/jupyterhub/jupyterhub_config.py
+ADD custom_templates /srv/jupyterhub/custom_templates
+# No longer needed due to updated version
+# ADD admin-react.js /srv/venv/share/jupyterhub/static/js/admin-react.js
+
+
+# FROM taccsciapps/jupyterhub:2.0.5
+
+# ADD spawner_hooks.py /opt/conda/lib/python3.6/site-packages/jupyterhub/spawner_hooks.py
