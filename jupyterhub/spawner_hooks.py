@@ -683,7 +683,7 @@ def set_selected_image(spawner: Any) -> None:
     if len(spawner.configs.get("images")) == 1:
         spawner.image = spawner.configs.get("images")[0]["name"]
     else:
-        image_options = list(spawner.configs.get("images"))
+        image_options = spawner.configs.get("images")
         spawner.log.info(f"Verifiying image: {image_options}")
         user_configs = spawner.user_configs
         spawner.log.info(f"User configs: {user_configs}")
