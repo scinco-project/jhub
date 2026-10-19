@@ -1,6 +1,15 @@
 # Changelog
 All notable changes to this project will be documented in this file
 
+## [26Q3.0] (Oct 20, 2026)
+### 🚀 Added
+- Improved modularization of JupyterHub by implementing deployment hooks
+- Added symlink enabling capabilities
+- Converted from using TAS to LDAP for user projects and access
+### 🔧 Modified
+- More refactoring, moving to pure functions
+- Better error handling and debugging
+
 ## [26Q2.0] (June 23, 2026)
 ### 🚀 Added
 - Tenant-specific behavior via `IS_TACC` and `IS_DESIGNSAFE` flags — controls allocation checks, uid/gid resolution, and feature availability per deployment
