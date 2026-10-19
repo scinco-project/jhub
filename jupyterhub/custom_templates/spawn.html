@@ -1,8 +1,10 @@
 {% extends "templates/spawn.html" %}
 {% block main %}
-<div class="row text-center">
-    <img id='spawner_options_logo' src='' alt='Spawner options logo' class='img-fluid float-left' title='Spawner options logo'/>
-    <img id='tacc_logo' src='' alt='tacc logo' class='img-fluid float-right' title='tacc logo'/>
+<div class="container">
+  <div class="row justify-content-center align-items-center text-center" style="gap: 24px;">
+      <img id='spawner_options_logo' src='' alt='Spawner options logo' class='img-fluid' style='max-height: 108px; width: auto;' title='Spawner options logo'/>
+      <img id='tacc_logo' src='' alt='tacc logo' class='img-fluid' style='max-height: 108px; width: auto;' title='tacc logo'/>
+  </div>
 </div>
 {{ super() }}
 
