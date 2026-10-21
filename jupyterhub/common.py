@@ -13,7 +13,8 @@ logger = logging.getLogger("JupyterHub")
 
 # Detect which target we are deploying to
 # Requires us to set this in our deployment yaml
-DEPLOYMENT_TARGET = os.environ.get("DEPLOYMENT_TARGET", "").lower()
+# It should be safe to default to tacc for most environments
+DEPLOYMENT_TARGET = os.environ.get("DEPLOYMENT_TARGET", "tacc").lower()
 
 DEPLOYMENTS = {
     "tacc": {
