@@ -104,7 +104,7 @@ c.JupyterHub.authenticator_class = TapisOAuthenticator
 c.TapisOAuthenticator.oauth_callback_url = CONFIGS["oauth_callback_url"]
 c.TapisOAuthenticator.client_id = CONFIGS["tapis_client_id"]
 c.TapisOAuthenticator.client_secret = CONFIGS["tapis_client_key"]
-c.TapisOAuthenticator.authorize_url = f"{CONFIGS.get("tapis_base_url").rstrip("/")}/oauth2/authorize"
+c.TapisOAuthenticator.authorize_url = f'{CONFIGS.get("tapis_base_url").rstrip("/")}/oauth2/authorize'
 
 c.Authenticator.admin_users = CONFIGS.get("admin_users", [])
 c.Authenticator.allow_all = True
@@ -433,7 +433,7 @@ c.JupyterHub.spawner_class = "kubespawner.KubeSpawner"
 # c.JupyterHub.subdomain_host = ''
 
 # Paths to search for jinja templates, before using the default templates.
-c.JupyterHub.template_paths = ["/usr/local/share/jupyterhub/templates/custom_templates"]
+c.JupyterHub.template_paths = ["/srv/jupyterhub/custom_templates"]
 
 # Extra variables to be passed into jinja templates
 # c.JupyterHub.template_vars = {}

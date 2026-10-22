@@ -4,6 +4,8 @@ __pycache__/
 .venv/
 venv/
 
+local-dev/
+
 .DS_Store
 
 .vscode/
