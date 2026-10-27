@@ -17,11 +17,27 @@ All notable changes to this project will be documented in this file
 ### 🚀 Added
 - Improved modularization of JupyterHub by implementing deployment hooks
 - Added symlink enabling capabilities
-- Converted from using TAS to LDAP for user projects and access
-- Updated JuyterHub from 3.0.0 to 6.0.1
+- Converted from TAS to LDAP for user accounts, projects, and access
+  - User account (uid, gid, home directory) now read from the LDAP `People` entry (`retrieve_full_ldap_account`, `get_ldap_data`), replacing the TAS users API
+  - Allocation/project membership now read from LDAP `Groups`, replacing the TAS projects API; users with no groups are rejected with a 403
+  - Supplemental GIDs set on the spawner from the user's LDAP group DNs
+  - Restricted project detection now uses the LDAP group DN; default `RESTRICTED_ID` changed from `66657` to `G-827652`
+  - Restricted users are blocked from DesignSafe JupyterHub 
+  - Requires `LDAP_PASS`; `TAS_ROLE_ACCT`/`TAS_ROLE_PASS` are no longer used
+- Retries on metadata calls (`get_tenant_configs`, `get_user_configs`) via `tenacity`, configurable with `RETRY_ATTEMPTS` and `RETRY_WAIT`
+- Per-deployment defaults for `TAPIS_BASE_URL`, `PORTALS_BASE_URL`, and Jupyter home directory
+- `Dockerfile.uv` for building with uv
+- Type hints on function signatures
+- Updated JupyterHub from 3.0.0 to 6.0.1
 ### 🔧 Modified
 - More refactoring, moving to pure functions
 - Better error handling and debugging
+- `INSTANCE`, `TENANT`, and `TAPIS_SERVICE_TOKEN` are now required at startup
+- Spawn page template updated for the new JupyterHub version; template path moved to `/srv/jupyterhub/custom_templates`
+- Converted remaining `.format()`/`%` strings to f-strings and removed commented-out logging
+### 🔧 Deleted
+- Removed `IS_TACC`/`IS_DESIGNSAFE` flags in favor of `DEPLOYMENT_TARGET`
+- Removed TAS API calls
 
 ## [26Q2.0] (June 23, 2026)
 ### 🚀 Added
