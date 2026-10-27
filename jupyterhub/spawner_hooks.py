@@ -78,6 +78,12 @@ def hook(spawner: Any) -> None:
         spawner.log = _UserPrefixedLogger(spawner.log, spawner.user.name)
     spawner.log.info("In main hook function")
     spawner.start_timeout = 60 * 5
+    # TODO - figure out why spawner configs are none sometimes
+    # is it meta failing? is hook being called before get_notebook_options?
+    has_configs = hasattr(spawner, 'configs')
+    if not has_configs:
+        spawner.log.info("spawner.configs not set in hook function, trying to fetch")
+        spawner.configs = get_tenant_configs_for_user(spawner)
     spawner.log.info(f"👻 tenant configs 👻 {spawner.configs}")
     spawner.log.info(f"👽 user configs 👽 {spawner.user_configs}")
     spawner.log.info(f"😱 user options (from form) 😱 {spawner.user_options}")
@@ -246,6 +252,7 @@ def get_tenant_configs_for_user(spawner: Any) -> dict:
 
 async def get_notebook_options(spawner: Any) -> str | None:
     """Determine which images should be shown to the user to select."""
+    spawner.log.info("Inside the get_notebook_options function")
     # spawner.tas_data = get_tas_user_projects(spawner)
     spawner.ldap_groups = get_user_ldap_groups(spawner)
     is_user_allowed(spawner)
