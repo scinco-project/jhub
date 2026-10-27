@@ -1,11 +1,24 @@
 # Changelog
 All notable changes to this project will be documented in this file
 
+## [26Q3.3] (Oct 27, 2026)
+### 🐛 Bug fix
+- Fix spawner.configs check to use getattr
+
+## [26Q3.2] (Oct 22, 2026)
+### 🐛 Bug fix
+- Check is spawner.configs exists and attempt to refetch
+
+## [26Q3.1] (Oct 21, 2026)
+### 🔧 Modified
+- Set default deployment target
+
 ## [26Q3.0] (Oct 20, 2026)
 ### 🚀 Added
 - Improved modularization of JupyterHub by implementing deployment hooks
 - Added symlink enabling capabilities
 - Converted from using TAS to LDAP for user projects and access
+- Updated JuyterHub from 3.0.0 to 6.0.1
 ### 🔧 Modified
 - More refactoring, moving to pure functions
 - Better error handling and debugging
