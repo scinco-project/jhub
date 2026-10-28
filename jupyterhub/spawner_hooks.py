@@ -731,13 +731,24 @@ def set_selected_image(spawner: Any) -> None:
         spawner.notebook_dir = image.get("notebook_dir", "")
 
 
+def get_num_threads(spawner: Any) -> str:
+    num_threads = "1"
+
+    try:
+        num_threads = str(max(1, int(spawner.cpu_limit)))
+    except Exception as e:
+        spawner.log.info(f"Error setting num threads: {e}")
+
+    return num_threads
+
+
 def set_spawner_env(spawner: Any) -> None:
     user = spawner.user.name
     uid = str(spawner.uid)
     gid = str(spawner.gid)
 
     # Convert spawner.cpu_limit to integer string
-    num_threads = str(max(1, int(spawner.cpu_limit or 1)))
+    num_threads = get_num_threads(spawner)
 
     env = {
         "MKL_NUM_THREADS": num_threads,
