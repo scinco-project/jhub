@@ -735,7 +735,7 @@ def get_num_threads(spawner: Any) -> str:
     num_threads = "1"
 
     try:
-        num_threads = str(max(1, int(spawner.cpu_limit)))
+        num_threads = str(max(1, int(float(spawner.cpu_limit))))
     except Exception as e:
         spawner.log.info(f"Error setting num threads: {e}")
 
