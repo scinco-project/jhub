@@ -731,18 +731,30 @@ def set_selected_image(spawner: Any) -> None:
         spawner.notebook_dir = image.get("notebook_dir", "")
 
 
+def get_num_threads(spawner: Any) -> str:
+    num_threads = "1"
+
+    try:
+        num_threads = str(max(1, int(float(spawner.cpu_limit))))
+    except Exception as e:
+        spawner.log.info(f"Error setting num threads: {e}")
+
+    return num_threads
+
+
 def set_spawner_env(spawner: Any) -> None:
     user = spawner.user.name
     uid = str(spawner.uid)
     gid = str(spawner.gid)
 
-    cpu_limit = str(spawner.cpu_limit)
+    # Convert spawner.cpu_limit to integer string
+    num_threads = get_num_threads(spawner)
 
     env = {
-        "MKL_NUM_THREADS": cpu_limit,
-        "NUMEXPR_NUM_THREADS": cpu_limit,
-        "OMP_NUM_THREADS": cpu_limit,
-        "OPENBLAS_NUM_THREADS": cpu_limit,
+        "MKL_NUM_THREADS": num_threads,
+        "NUMEXPR_NUM_THREADS": num_threads,
+        "OMP_NUM_THREADS": num_threads,
+        "OPENBLAS_NUM_THREADS": num_threads,
         "SCINCO_JUPYTERHUB_IMAGE": spawner.image,
         "HUB_USER": user,
         "HUB_UID": uid,

@@ -1,9 +1,13 @@
 # Changelog
 All notable changes to this project will be documented in this file
 
+## [26Q3.4] (Oct 28, 2026)
+### 🔧 Modified
+- Convert spawner.cpu_limit to int string for environment variables
+
 ## [26Q3.3] (Oct 27, 2026)
 ### 🐛 Bug fix
-- Fix spawner.configs check to use getattr
+- Fix spawner.configs check to use hasattr
 
 ## [26Q3.2] (Oct 22, 2026)
 ### 🐛 Bug fix
