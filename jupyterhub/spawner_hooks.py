@@ -736,13 +736,14 @@ def set_spawner_env(spawner: Any) -> None:
     uid = str(spawner.uid)
     gid = str(spawner.gid)
 
-    cpu_limit = str(spawner.cpu_limit)
+    # Convert spawner.cpu_limit to integer string
+    num_threads = str(max(1, int(spawner.cpu_limit or 1)))
 
     env = {
-        "MKL_NUM_THREADS": cpu_limit,
-        "NUMEXPR_NUM_THREADS": cpu_limit,
-        "OMP_NUM_THREADS": cpu_limit,
-        "OPENBLAS_NUM_THREADS": cpu_limit,
+        "MKL_NUM_THREADS": num_threads,
+        "NUMEXPR_NUM_THREADS": num_threads,
+        "OMP_NUM_THREADS": num_threads,
+        "OPENBLAS_NUM_THREADS": num_threads,
         "SCINCO_JUPYTERHUB_IMAGE": spawner.image,
         "HUB_USER": user,
         "HUB_UID": uid,
