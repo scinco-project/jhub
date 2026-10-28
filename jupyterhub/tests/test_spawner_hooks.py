@@ -150,7 +150,7 @@ def test_user_with_configs_does_not_refetch(load_modules, fake_spawner):
     assert spawner.configs == BASE_CONFIGS
 
 
-@pytest.mark.parametrize("test_cpu_threads, expected_cpu_threads", [("1.5", "1"), ("0", "1"), ("2.5", "2"), ("5", "5")])
+@pytest.mark.parametrize("test_cpu_threads, expected_cpu_threads", [("1.5", "1"), ("0", "1"), ("2.5", "2"), ("5", "5"), ("bad value", "1")])
 def test_num_threads(load_modules, fake_spawner, test_cpu_threads, expected_cpu_threads):
     _, spawner_hooks = load_modules("designsafe")
     spawner = _hook_spawner(fake_spawner)
