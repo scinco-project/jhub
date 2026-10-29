@@ -84,6 +84,9 @@ def hook(spawner: Any) -> None:
     if not has_configs:
         spawner.log.info("spawner.configs not set in hook function, trying to fetch")
         spawner.configs = get_tenant_configs_for_user(spawner)
+    # Adding this just in case it's not set. User configs can be []
+    if not hasattr(spawner, 'user_configs'):
+        spawner.user_configs = []
     spawner.log.info(f"👻 tenant configs 👻 {spawner.configs}")
     spawner.log.info(f"👽 user configs 👽 {spawner.user_configs}")
     spawner.log.info(f"😱 user options (from form) 😱 {spawner.user_options}")
@@ -186,6 +189,8 @@ def is_user_allowed(spawner: Any) -> None:
     Check response from LDAP to check for any allocation
     Should already have been caught, but double checking doesn't hurt
     """
+    if DEPLOYMENT_TARGET == 'training':
+        return
     user = spawner.user.name
     spawner.log.info(f"Check if user has any allocation: {user}")
     if not len(spawner.ldap_groups) > 0:
@@ -247,6 +252,12 @@ def apply_training_uid_gid(spawner: Any) -> None:
 def get_tenant_configs_for_user(spawner: Any) -> dict:
     """TACC-only: fetch tenant configs, respecting the restricted-allocation
     override. Other deployments always get the unrestricted configs."""
+    # This will be called if the flow doesn't have a configs object, so blocking
+    # this from checking for the training flow
+    # Allowing the DS flow to go through so we can still catch restricted users
+    # that should not be on the DS JHub
+    if DEPLOYMENT_TARGET == 'training':
+        return get_tenant_configs()
     return get_tenant_configs(restricted=is_user_restricted(spawner))
 
 
